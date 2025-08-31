@@ -400,79 +400,56 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
             />
           </View>
 
-          {/* Participantes con autocompletar */}
+          {/* Participantes */}
           <View style={styles.formFieldContainer}>
             <Text style={styles.formLabel}>Participantes <Text style={styles.requiredAsterisk}>*</Text> <Text style={styles.formSubtext}>(seleccionar los alumnos)</Text></Text>
             
-            {/* Campo de búsqueda */}
-            <TextInput
-              style={styles.formInput}
-              placeholder="Buscar alumnos..."
-              placeholderTextColor="#B3D4F1"
-              value={participantesSearch}
-              onChangeText={(text) => {
-                setParticipantesSearch(text);
-                setShowParticipantesDropdown(text.length > 0);
-              }}
-              onFocus={() => setShowParticipantesDropdown(participantesSearch.length > 0)}
-            />
-            
-            {/* Dropdown de resultados */}
-            {showParticipantesDropdown && (
-              <View style={styles.dropdownContainer}>
-                {studentsLoading ? (
-                  <View style={styles.dropdownLoadingContainer}>
-                    <Text style={styles.dropdownLoadingText}>Cargando alumnos...</Text>
-                  </View>
-                ) : filteredStudents.length === 0 ? (
-                  <View style={styles.dropdownEmptyContainer}>
-                    <Text style={styles.dropdownEmptyText}>
-                      {participantesSearch.length > 0 
-                        ? 'No se encontraron alumnos con ese criterio'
-                        : 'No hay alumnos disponibles en esta división'
-                      }
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.dropdownList}>
-                    {filteredStudents.map((item) => (
-                      <TouchableOpacity
-                        key={item._id}
-                        style={styles.dropdownItem}
-                        onPress={() => handleSelectParticipante(item._id)}
-                      >
-                        <Text style={styles.dropdownItemText}>
-                          {item.nombre} {item.apellido} - {item.dni}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+            {/* Cuadrícula de estudiantes */}
+            {studentsLoading ? (
+              <View style={styles.studentsLoadingContainer}>
+                <Text style={styles.studentsLoadingText}>Cargando alumnos...</Text>
               </View>
-            )}
-            
-            {/* Participantes seleccionados */}
-            {selectedParticipantes.length > 0 && (
-              <View style={styles.selectedParticipantesContainer}>
-                <Text style={styles.selectedParticipantesTitle}>Alumnos seleccionados:</Text>
-                {selectedParticipantes.map((studentId) => {
-                  const student = students.find(s => s._id === studentId);
-                  return student ? (
-                    <View key={studentId} style={styles.selectedParticipanteItem}>
-                      <Text style={styles.selectedParticipanteText}>
-                        {student.nombre} {student.apellido}
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.removeParticipanteButton}
-                        onPress={() => handleRemoveParticipante(studentId)}
-                      >
-                        <Text style={styles.removeParticipanteText}>×</Text>
-                      </TouchableOpacity>
+            ) : students.length === 0 ? (
+              <View style={styles.studentsEmptyContainer}>
+                <Text style={styles.studentsEmptyText}>No hay alumnos disponibles en esta división</Text>
+              </View>
+            ) : (
+              <View style={styles.studentsGrid}>
+                {students.map((student) => (
+                  <TouchableOpacity
+                    key={student._id}
+                    style={[
+                      styles.studentItem,
+                      selectedParticipantes.includes(student._id) && styles.studentItemSelected
+                    ]}
+                    onPress={() => handleSelectParticipante(student._id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.studentAvatar}>
+                      {student.avatar ? (
+                        <Image 
+                          source={{ uri: student.avatar }} 
+                          style={styles.studentAvatarImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Text style={styles.studentIcon}>👤</Text>
+                      )}
+                      {selectedParticipantes.includes(student._id) && (
+                        <View style={styles.checkMark}>
+                          <Text style={styles.checkText}>✓</Text>
+                        </View>
+                      )}
                     </View>
-                  ) : null;
-                })}
+                    <Text style={styles.studentNombre}>{student.nombre}</Text>
+                    <Text style={styles.studentApellido}>{student.apellido}</Text>
+                    <Text style={styles.studentDivision}>{student.division?.nombre}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
+            
+
           </View>
 
           {/* Descripción */}
@@ -683,34 +660,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   // Estilos para el autocompletar de participantes
-  dropdownContainer: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#0E5FCE',
-    borderRadius: 8,
-    maxHeight: 200,
-    zIndex: 1000,
-    elevation: 5,
-  },
-  dropdownList: {
-    maxHeight: 200,
-  },
-  dropdownItem: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    color: '#333333',
-  },
-  selectedParticipantesContainer: {
-    marginTop: 15,
-  },
+
+
   selectedParticipantesTitle: {
     fontSize: 14,
     fontWeight: 'bold',
@@ -747,22 +698,93 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  dropdownLoadingContainer: {
-    padding: 15,
+
+
+  // Estilos para la cuadrícula de estudiantes
+  studentsLoadingContainer: {
+    padding: 20,
     alignItems: 'center',
   },
-  dropdownLoadingText: {
-    fontSize: 14,
+  studentsLoadingText: {
+    fontSize: 16,
     color: '#666666',
   },
-  dropdownEmptyContainer: {
-    padding: 15,
+  studentsEmptyContainer: {
+    padding: 20,
     alignItems: 'center',
   },
-  dropdownEmptyText: {
-    fontSize: 14,
+  studentsEmptyText: {
+    fontSize: 16,
     color: '#666666',
+  },
+  studentsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  studentItem: {
+    width: '22%',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  studentItemSelected: {
+    opacity: 0.7,
+  },
+  studentAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    position: 'relative',
+  },
+  studentAvatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  studentIcon: {
+    fontSize: 24,
+    color: '#666666',
+  },
+  checkMark: {
+    position: 'absolute',
+    right: -5,
+    bottom: -5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#0E5FCE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  studentNombre: {
+    fontSize: 12,
+    color: '#0E5FCE',
     textAlign: 'center',
+  },
+  studentApellido: {
+    fontSize: 12,
+    color: '#0E5FCE',
+    textAlign: 'center',
+  },
+  studentDivision: {
+    fontSize: 10,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 1,
+  },
+  selectedParticipantesList: {
+    marginTop: 10,
   },
 });
 

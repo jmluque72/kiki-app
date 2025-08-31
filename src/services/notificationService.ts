@@ -148,4 +148,17 @@ export class NotificationService {
       throw new Error(error.response?.data?.message || 'Error al obtener destinatarios');
     }
   }
+
+  // Eliminar notificación (solo para coordinadores)
+  static async deleteNotification(notificationId: string): Promise<void> {
+    try {
+      const response = await apiClient.delete<ApiResponse>(`/notifications/${notificationId}`);
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Error al eliminar notificación');
+      }
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Error al eliminar notificación');
+    }
+  }
 } 

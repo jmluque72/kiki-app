@@ -1,5 +1,6 @@
 import { apiClient } from './api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { processImage, ImageProcessingPresets } from './imageProcessor';
 
 export interface UpdateAvatarResponse {
   success: boolean;
@@ -21,19 +22,24 @@ export class UserService {
       console.log('🖼️ [UserService] Actualizando avatar');
       console.log('🖼️ [UserService] Image URI:', imageUri);
       
+      // Procesar la imagen antes de subirla
+      console.log('🖼️ [UserService] Procesando imagen...');
+      const processedImage = await processImage(imageUri, ImageProcessingPresets.avatar);
+      console.log('✅ [UserService] Imagen procesada:', processedImage.width, 'x', processedImage.height);
+      
       // Crear FormData para enviar la imagen
       const formData = new FormData();
       
       // Obtener el nombre del archivo de la URI
       const fileName = imageUri.split('/').pop() || 'avatar.jpg';
-      const fileType = 'image/jpeg'; // Por defecto JPEG
+      const fileType = 'image/jpeg'; // Siempre JPEG después del procesamiento
       
       console.log('🖼️ [UserService] File name:', fileName);
       console.log('🖼️ [UserService] File type:', fileType);
       
-      // Agregar la imagen al FormData
+      // Agregar la imagen procesada al FormData
       const imageFile = {
-        uri: imageUri,
+        uri: processedImage.uri,
         type: fileType,
         name: fileName,
       } as any;

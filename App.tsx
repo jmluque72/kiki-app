@@ -3,6 +3,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar, View, ActivityIndicator } from 'react-native';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import VerifyCodeScreen from './screens/VerifyCodeScreen';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import HomeScreen from './screens/HomeScreen';
 import InstitutionSelector from './components/InstitutionSelector';
 import { LoadingProvider } from './contexts/LoadingContext';
@@ -16,6 +19,11 @@ const AppContent = () => {
   const { isAuthenticated, isLoading, associations } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showVerifyCode, setShowVerifyCode] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [showInstitutionSelector, setShowInstitutionSelector] = useState(false);
 
   const handleSplashFinish = () => {
@@ -26,12 +34,39 @@ const AppContent = () => {
     setShowRegister(true);
   };
 
-  const handleBackToLogin = () => {
+  const handleRegisterSuccess = () => {
     setShowRegister(false);
   };
 
-  const handleRegisterSuccess = () => {
+  const handleShowForgotPassword = () => {
+    setShowForgotPassword(true);
+  };
+
+  const handleBackToLogin = () => {
     setShowRegister(false);
+    setShowForgotPassword(false);
+    setShowVerifyCode(false);
+    setShowResetPassword(false);
+    setForgotPasswordEmail('');
+    setVerificationCode('');
+  };
+
+  const handleCodeSent = (email: string) => {
+    setForgotPasswordEmail(email);
+    setShowForgotPassword(false);
+    setShowVerifyCode(true);
+  };
+
+  const handleCodeVerified = (email: string, code: string) => {
+    setVerificationCode(code);
+    setShowVerifyCode(false);
+    setShowResetPassword(true);
+  };
+
+  const handlePasswordReset = () => {
+    setShowResetPassword(false);
+    setForgotPasswordEmail('');
+    setVerificationCode('');
   };
 
   const handleInstitutionSelected = () => {
@@ -77,7 +112,37 @@ const AppContent = () => {
       );
     }
 
-    return <LoginScreen onShowRegister={handleShowRegister} />;
+    if (showForgotPassword) {
+      return (
+        <ForgotPasswordScreen 
+          onBack={handleBackToLogin}
+          onCodeSent={handleCodeSent}
+        />
+      );
+    }
+
+    if (showVerifyCode) {
+      return (
+        <VerifyCodeScreen 
+          email={forgotPasswordEmail}
+          onBack={handleBackToLogin}
+          onCodeVerified={handleCodeVerified}
+        />
+      );
+    }
+
+    if (showResetPassword) {
+      return (
+        <ResetPasswordScreen 
+          email={forgotPasswordEmail}
+          code={verificationCode}
+          onBack={handleBackToLogin}
+          onPasswordReset={handlePasswordReset}
+        />
+      );
+    }
+
+    return <LoginScreen onShowRegister={handleShowRegister} onShowForgotPassword={handleShowForgotPassword} />;
   };
 
   return (

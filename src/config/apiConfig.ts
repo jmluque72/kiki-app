@@ -20,14 +20,14 @@ export const getApiBaseUrl = () => {
   
   if (Platform.OS === 'android') {
     // Para emulador Android
-    return 'http://10.0.2.2:3000/api';
+    return 'http://192.168.68.103:3000/api';
   } else if (Platform.OS === 'ios') {
     // Para emulador iOS o dispositivo físico iOS
-    return 'http://localhost:3000/api';
+    return 'http://192.168.68.103:3000/api';
   }
   
   // Fallback
-  return 'http://localhost:3000/api';
+  return 'http://192.168.68.103:3000/api';
 };
 
 // URL base del API
@@ -41,44 +41,4 @@ export const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
 };
 
-// Importar axios
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Crear instancia de axios
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: API_TIMEOUT,
-  headers: DEFAULT_HEADERS,
-});
-
-// Interceptor para agregar token de autenticación
-apiClient.interceptors.request.use(
-  async (config) => {
-    try {
-      const token = await AsyncStorage.getItem('auth_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (error) {
-      console.error('Error al obtener token:', error);
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Interceptor para manejar respuestas
-apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    console.error('API Error:', error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);
-
-export default apiClient; 
+// Configuración exportada para usar en api.ts 

@@ -209,8 +209,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Verificar si el usuario tiene asociaciones
           if (userAssociations.length === 0) {
             console.log('⚠️ Usuario sin asociaciones');
+            Alert.alert(
+              '⚠️ Sin Asociaciones',
+              'No tienes asociaciones activas en el sistema.\n\nContacta al administrador para que te asigne a una institución.',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => console.log('Usuario confirmó alert de sin asociaciones')
+                }
+              ]
+            );
             throw new Error('No tienes asociaciones activas. Contacta al administrador.');
           }
+          
+          // Mostrar alert con los datos de las asociaciones
+          const associationsInfo = userAssociations.map((assoc, index) => {
+            const studentInfo = assoc.student 
+              ? `\n   Estudiante: ${assoc.student.nombre} ${assoc.student.apellido}${assoc.student.avatar ? ' (con avatar)' : ''}`
+              : '\n   Sin estudiante asociado';
+            
+            return `${index + 1}. ${assoc.account.nombre}${assoc.division ? ` - ${assoc.division.nombre}` : ''} (${assoc.role.nombre})${studentInfo}`;
+          }).join('\n\n');
+          
+          Alert.alert(
+            '✅ Login Exitoso',
+            `Usuario: ${userData.name || userData.email}\n\nAsociaciones encontradas (${userAssociations.length}):\n\n${associationsInfo}`,
+            [
+              {
+                text: 'OK',
+                onPress: () => console.log('Usuario confirmó alert de asociaciones')
+              }
+            ]
+          );
           
           return true;
         } catch (sharedError: any) {
@@ -218,6 +248,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (sharedError.message.includes('No tienes asociaciones activas')) {
             throw sharedError;
           }
+          Alert.alert(
+            '❌ Error',
+            'Error al cargar asociaciones del usuario.\n\nDetalles: ' + sharedError.message,
+            [
+              {
+                text: 'OK',
+                onPress: () => console.log('Usuario confirmó alert de error')
+              }
+            ]
+          );
           throw new Error('Error al cargar asociaciones del usuario');
         }
       } else {

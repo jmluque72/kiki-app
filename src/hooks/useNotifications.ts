@@ -12,6 +12,7 @@ export interface UseNotificationsReturn {
   loadNotifications: () => Promise<void>;
   loadRecipients: (accountId: string, divisionId?: string) => Promise<void>;
   markAsRead: (notificationId: string) => Promise<void>;
+  deleteNotification: (notificationId: string) => Promise<void>;
   sendNotification: (data: CreateNotificationRequest) => Promise<void>;
   refreshNotifications: () => Promise<void>;
 }
@@ -100,6 +101,21 @@ export const useNotifications = (): UseNotificationsReturn => {
     }
   }, []);
 
+  const deleteNotification = useCallback(async (notificationId: string) => {
+    try {
+      await NotificationService.deleteNotification(notificationId);
+      
+      // Remover la notificación de la lista local
+      setNotifications(prev => 
+        prev.filter(notification => notification._id !== notificationId)
+      );
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Error deleting notification:', err);
+      throw err;
+    }
+  }, []);
+
   const sendNotification = useCallback(async (data: CreateNotificationRequest) => {
     try {
       setLoading(true);
@@ -136,6 +152,7 @@ export const useNotifications = (): UseNotificationsReturn => {
     loadNotifications,
     loadRecipients,
     markAsRead,
+    deleteNotification,
     sendNotification,
     refreshNotifications
   };

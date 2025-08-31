@@ -5,7 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  StyleSheet
+  StyleSheet,
+  Image
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -234,9 +235,15 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
         {/* Título y información */}
         <View style={styles.asistenciaInfo}>
           <Text style={styles.asistenciaTitle}>ASISTENCIA</Text>
-          <Text style={styles.turnoInfo}>
-            Turno <Text style={styles.turnoTarde}>{getDivisionName()}</Text> - {getInstitutionName()} - {getCurrentDate()}
-          </Text>
+          
+          {/* Institución y Sala destacadas */}
+          <View style={styles.institutionInfo}>
+            <Text style={styles.institutionName}>{getInstitutionName()}</Text>
+            <Text style={styles.divisionName}>{getDivisionName()}</Text>
+          </View>
+          
+          {/* Fecha en línea separada */}
+          <Text style={styles.dateInfo}>{getCurrentDate()}</Text>
 
           <View style={styles.estadisticas}>
             <TouchableOpacity 
@@ -283,7 +290,15 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
                 activeOpacity={0.7}
               >
                 <View style={styles.personaAvatar}>
-                  <Text style={styles.personaIcon}>👤</Text>
+                  {student.avatar ? (
+                    <Image 
+                      source={{ uri: student.avatar }} 
+                      style={styles.personaAvatarImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.personaIcon}>👤</Text>
+                  )}
                   {attendance[student._id] && (
                     <View style={styles.checkMark}>
                       <Text style={styles.checkText}>✓</Text>
@@ -342,15 +357,31 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 10,
   },
-  turnoInfo: {
+  institutionInfo: {
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  institutionName: {
+    fontSize: 24,
+    fontFamily: fonts.bold,
+    fontWeight: 'bold',
+    color: '#FF8C42',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  divisionName: {
+    fontSize: 20,
+    fontFamily: fonts.bold,
+    fontWeight: 'bold',
+    color: '#FF8C42',
+    textAlign: 'center',
+  },
+  dateInfo: {
     fontSize: 16,
-    color: '#0E5FCE',
+    fontFamily: fonts.medium,
+    color: '#666666',
     textAlign: 'center',
     marginBottom: 20,
-  },
-  turnoTarde: {
-    color: '#FF8C42',
-    fontFamily: fonts.bold,
   },
   estadisticas: {
     flexDirection: 'row',
@@ -422,6 +453,11 @@ const styles = StyleSheet.create({
   personaIcon: {
     fontSize: 24,
     color: '#FFFFFF',
+  },
+  personaAvatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   checkMark: {
     position: 'absolute',

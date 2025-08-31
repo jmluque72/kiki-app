@@ -19,9 +19,10 @@ import { useCustomAlert } from '../src/hooks/useCustomAlert';
 
 interface LoginScreenProps {
   onShowRegister?: () => void;
+  onShowForgotPassword?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onShowRegister }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onShowRegister, onShowForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -74,13 +75,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowRegister }) => {
   };
 
   const handleForgotPassword = () => {
-    showAlert({
-      title: 'Recuperar Contraseña',
-      message: 'Funcionalidad próximamente',
-      type: 'info',
-      confirmText: 'OK',
-      onConfirm: hideAlert,
-    });
+    if (onShowForgotPassword) {
+      onShowForgotPassword();
+    }
   };
 
   const handleRegister = () => {

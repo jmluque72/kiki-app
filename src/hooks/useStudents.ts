@@ -8,6 +8,7 @@ export interface Student {
   email?: string;
   dni: string;
   year: number;
+  avatar?: string; // Campo para la foto del estudiante
   account: {
     _id: string;
     nombre: string;

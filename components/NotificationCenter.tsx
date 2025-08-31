@@ -34,7 +34,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     recipients: [] as string[]
   });
 
-  const { notifications, recipients, loading, markAsRead, sendNotification, loadRecipients, loadNotifications } = useNotifications();
+  const { notifications, recipients, loading, markAsRead, deleteNotification, sendNotification, loadRecipients, loadNotifications } = useNotifications();
   const { selectedInstitution } = useInstitution();
   const { user } = useAuth();
   const { showLoading, hideLoading } = useLoading();
@@ -95,6 +95,36 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     } catch (error) {
       console.error('Error marking as read:', error);
     }
+  };
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    Alert.alert(
+      'Eliminar Notificación',
+      '¿Estás seguro de que quieres eliminar esta notificación? Esta acción no se puede deshacer.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteNotification(notificationId);
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Error al eliminar la notificación');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Función para verificar si una notificación está leída
+  const isNotificationRead = (notification: any) => {
+    return notification.status === 'read' || 
+           notification.readBy?.some((read: any) => read.user === user?._id);
   };
 
   // Función para seleccionar/deseleccionar un alumno
@@ -198,42 +228,78 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     return notificationIcons[type] || notificationIcons.informacion;
   };
 
-  const renderNotification = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={[
+  const renderNotification = ({ item }: { item: any }) => {
+    const isRead = isNotificationRead(item);
+    
+    return (
+      <View style={[
         styles.notificationItem,
-        item.status === 'read' && styles.notificationRead
-      ]}
-      onPress={() => handleMarkAsRead(item._id)}
-    >
-      <View style={styles.notificationHeader}>
-        <Image
-          source={getTypeIcon(item.type)}
-          style={styles.notificationIcon}
-          resizeMode="contain"
-        />
-        <View style={styles.notificationInfo}>
-          <Text style={styles.notificationTitle}>{item.title}</Text>
-          <Text style={styles.notificationSender}>
-            De: {item.sender.nombre}
+        isRead && styles.notificationRead
+      ]}>
+        {/* Indicador de estado de lectura */}
+        <View style={[
+          styles.readStatusIndicator,
+          isRead ? styles.readIndicator : styles.unreadIndicator
+        ]} />
+        
+        <TouchableOpacity
+          style={styles.notificationContent}
+          onPress={() => handleMarkAsRead(item._id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.notificationHeader}>
+            <Image
+              source={getTypeIcon(item.type)}
+              style={styles.notificationIcon}
+              resizeMode="contain"
+            />
+            <View style={styles.notificationInfo}>
+              <Text style={[
+                styles.notificationTitle,
+                !isRead && styles.notificationTitleUnread
+              ]}>
+                {item.title}
+              </Text>
+              <Text style={styles.notificationSender}>
+                {item.sender.nombre}
+              </Text>
+            </View>
+            <View style={[styles.typeBadge, { backgroundColor: getTypeColor(item.type) }]}>
+              <Text style={styles.typeText}>{item.type.toUpperCase()}</Text>
+            </View>
+          </View>
+          <Text style={[
+            styles.notificationMessage,
+            !isRead && styles.notificationMessageUnread
+          ]}>
+            {item.message}
           </Text>
-        </View>
-        <View style={[styles.typeBadge, { backgroundColor: getTypeColor(item.type) }]}>
-          <Text style={styles.typeText}>{item.type.toUpperCase()}</Text>
-        </View>
+          <Text style={styles.notificationDate}>
+            {new Date(item.sentAt).toLocaleDateString('es-ES', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </Text>
+        </TouchableOpacity>
+        
+        {/* Botón de eliminar para coordinadores */}
+        {isCoordinador && (
+          <View style={styles.deleteButtonContainer}>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDeleteNotification(item._id)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.deleteButtonText}>Eliminar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
-      <Text style={styles.notificationMessage}>{item.message}</Text>
-      <Text style={styles.notificationDate}>
-        {new Date(item.sentAt).toLocaleDateString('es-ES', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })}
-      </Text>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   const renderSendForm = () => (
     <View style={styles.sendFormContainer}>
@@ -265,7 +331,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                 formData.type === 'informacion' && styles.typeButtonTextActive
               ]}>Información</Text>
             </View>
-            {formData.type === 'informacion' && <View style={styles.typeButtonIndicator} />}
+
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -290,7 +356,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                 formData.type === 'comunicacion' && styles.typeButtonTextActive
               ]}>Comunicación</Text>
             </View>
-            {formData.type === 'comunicacion' && <View style={styles.typeButtonIndicator} />}
+
           </TouchableOpacity>
         </View>
       </View>
@@ -348,7 +414,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                 activeOpacity={0.7}
               >
                 <View style={styles.studentAvatar}>
-                  <Text style={styles.studentIcon}>👤</Text>
+                  {student.avatar ? (
+                    <Image 
+                      source={{ uri: student.avatar }} 
+                      style={styles.studentAvatarImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.studentIcon}>👤</Text>
+                  )}
                   {selectedStudents[student._id] && (
                     <View style={styles.checkMark}>
                       <Text style={styles.checkText}>✓</Text>
@@ -541,16 +615,38 @@ const styles = StyleSheet.create({
   notificationItem: {
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
-    padding: 15,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
+  },
+  notificationContent: {
+    padding: 15,
   },
   notificationRead: {
-    opacity: 0.7,
+    backgroundColor: '#F8F9FA',
+    borderLeftWidth: 4,
+    borderLeftColor: '#E9ECEF',
+  },
+
+  readStatusIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 10,
+    borderBottomLeftRadius: 10,
+    zIndex: 1,
+  },
+  unreadIndicator: {
+    backgroundColor: '#0E5FCE',
+  },
+  readIndicator: {
+    backgroundColor: '#E9ECEF',
   },
   notificationHeader: {
     flexDirection: 'row',
@@ -572,6 +668,10 @@ const styles = StyleSheet.create({
     color: '#333333',
     marginBottom: 2,
   },
+  notificationTitleUnread: {
+    fontWeight: 'bold',
+    color: '#0E5FCE',
+  },
   notificationSender: {
     fontSize: 12,
     color: '#666666',
@@ -591,6 +691,9 @@ const styles = StyleSheet.create({
     color: '#333333',
     lineHeight: 20,
     marginBottom: 8,
+  },
+  notificationMessageUnread: {
+    fontWeight: '500',
   },
   notificationDate: {
     fontSize: 12,
@@ -646,10 +749,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   typeButtonActive: {
-    backgroundColor: '#F0F8FF',
+    backgroundColor: '#0E5FCE',
     borderColor: '#0E5FCE',
     shadowColor: '#0E5FCE',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
@@ -670,11 +773,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   typeButtonTextActive: {
-    color: '#0E5FCE',
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
   typeButtonIconActive: {
-    tintColor: '#0E5FCE',
+    tintColor: '#FFFFFF',
   },
   typeButtonIndicator: {
     position: 'absolute',
@@ -760,6 +863,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#FFFFFF',
   },
+  studentAvatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
   checkMark: {
     position: 'absolute',
     right: -3,
@@ -812,6 +920,27 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  deleteButtonContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 15,
+  },
+  deleteButton: {
+    backgroundColor: '#FF6B6B',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    fontSize: 14,
     color: '#FFFFFF',
     fontWeight: 'bold',
   },

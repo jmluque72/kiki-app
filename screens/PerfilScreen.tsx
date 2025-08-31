@@ -966,16 +966,20 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                               )}
                             </View>
                             <View style={styles.studentTextInfo}>
-                              <Text style={styles.asociacionStudent}>
-                                Estudiante: {item.student.nombre} {item.student.apellido}
+                              <Text style={styles.studentName}>
+                                {item.student.nombre} {item.student.apellido}
                               </Text>
+                              <Text style={styles.studentLabel}>Estudiante</Text>
                             </View>
                           </View>
                         )}
-                                                  <Text style={styles.asociacionRol}>Rol: {getRoleDisplayName(item.role.nombre)}</Text>
-                        <Text style={styles.asociacionStatus}>
-                          Estado: {item.status === 'active' ? 'Activo' : 'Inactivo'}
-                        </Text>
+                        
+                        <View style={styles.asociacionDetails}>
+                          <Text style={styles.asociacionRol}>Rol: {getRoleDisplayName(item.role.nombre)}</Text>
+                          <Text style={styles.asociacionStatus}>
+                            Estado: {item.status === 'active' ? 'Activo' : 'Inactivo'}
+                          </Text>
+                        </View>
                       </View>
                       {isFamilyAdmin && asociacionActiva !== item._id && (
                         <TouchableOpacity
@@ -1917,53 +1921,74 @@ const styles = StyleSheet.create({
   studentInfoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+    paddingVertical: 8,
   },
   studentAvatarContainer: {
     position: 'relative',
     marginRight: 12,
   },
   studentAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   studentAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#F0F0F0',
     textAlign: 'center',
-    lineHeight: 40,
-    fontSize: 16,
+    lineHeight: 60,
+    fontSize: 24,
     color: '#666666',
   },
   editStudentAvatarButton: {
     position: 'absolute',
-    right: -5,
-    bottom: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    right: -8,
+    bottom: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#0E5FCE',
     justifyContent: 'center',
     alignItems: 'center',
   },
   editStudentAvatarIcon: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#FFFFFF',
   },
   studentTextInfo: {
     flex: 1,
+    marginLeft: 8,
+  },
+  studentName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  studentLabel: {
+    fontSize: 12,
+    color: '#666666',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  asociacionDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
   },
   asociacionRol: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 2,
+    marginBottom: 6,
   },
   asociacionStatus: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 0,
   },
   removeAsociacionButton: {
     width: 32,
