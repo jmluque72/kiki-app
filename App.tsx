@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar, View, ActivityIndicator } from 'react-native';
 import LoginScreen from './screens/LoginScreen';
-import RegisterScreen from './screens/RegisterScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import VerifyCodeScreen from './screens/VerifyCodeScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
@@ -18,7 +17,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 const AppContent = () => {
   const { isAuthenticated, isLoading, associations } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
-  const [showRegister, setShowRegister] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showVerifyCode, setShowVerifyCode] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
@@ -30,20 +28,13 @@ const AppContent = () => {
     setShowSplash(false);
   };
 
-  const handleShowRegister = () => {
-    setShowRegister(true);
-  };
 
-  const handleRegisterSuccess = () => {
-    setShowRegister(false);
-  };
 
   const handleShowForgotPassword = () => {
     setShowForgotPassword(true);
   };
 
   const handleBackToLogin = () => {
-    setShowRegister(false);
     setShowForgotPassword(false);
     setShowVerifyCode(false);
     setShowResetPassword(false);
@@ -103,14 +94,7 @@ const AppContent = () => {
       return <HomeScreen />;
     }
 
-    if (showRegister) {
-      return (
-        <RegisterScreen 
-          onRegister={handleRegisterSuccess}
-          onBackToLogin={handleBackToLogin}
-        />
-      );
-    }
+
 
     if (showForgotPassword) {
       return (
@@ -142,7 +126,7 @@ const AppContent = () => {
       );
     }
 
-    return <LoginScreen onShowRegister={handleShowRegister} onShowForgotPassword={handleShowForgotPassword} />;
+    return <LoginScreen onShowForgotPassword={handleShowForgotPassword} />;
   };
 
   return (

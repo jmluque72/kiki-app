@@ -86,6 +86,21 @@ export class NotificationService {
     }
   }
 
+  // Obtener detalles completos de una notificación específica
+  static async getNotificationDetails(notificationId: string): Promise<Notification> {
+    try {
+      const response = await apiClient.get<ApiResponse<Notification>>(`/notifications/${notificationId}/details`);
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      } else {
+        throw new Error(response.data.message || 'Error al obtener detalles de la notificación');
+      }
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Error al obtener detalles de la notificación');
+    }
+  }
+
   // Marcar notificación como leída
   static async markAsRead(notificationId: string): Promise<void> {
     try {

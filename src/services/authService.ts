@@ -1,4 +1,4 @@
-import { apiClient, ApiResponse, LoginRequest, LoginResponse, RegisterMobileRequest, RegisterMobileResponse, Account } from './api';
+import { apiClient, ApiResponse, LoginRequest, LoginResponse, Account } from './api';
 
 export class AuthService {
   // Login de usuario
@@ -19,45 +19,7 @@ export class AuthService {
     }
   }
 
-  // Registro mobile
-  static async registerMobile(userData: RegisterMobileRequest): Promise<RegisterMobileResponse> {
-    try {
-      const response = await apiClient.post<ApiResponse<RegisterMobileResponse>>(
-        '/users/register-mobile',
-        userData
-      );
-      
-      if (response.data.success) {
-        // Devolver la respuesta completa para incluir el mensaje
-        return {
-          ...response.data.data,
-          message: response.data.message
-        };
-      } else {
-        throw new Error(response.data.message || 'Error al registrar usuario');
-      }
-    } catch (error: any) {
-      // Manejar errores específicos de validación
-      if (error.response?.data?.errors) {
-        const validationErrors = error.response.data.errors;
-        const errorMessages = Object.keys(validationErrors).map(field => {
-          const fieldError = validationErrors[field];
-          if (fieldError && fieldError.message) {
-            return `${field}: ${fieldError.message}`;
-          }
-          return `${field}: Error de validación`;
-        });
-        throw new Error(errorMessages.join('\n'));
-      }
-      
-      // Manejar otros tipos de errores
-      if (error.response?.data?.message) {
-        throw new Error(error.response.data.message);
-      }
-      
-      throw new Error('Error al registrar usuario');
-    }
-  }
+
 
   // Obtener cuentas disponibles para registro
   static async getAvailableAccounts(): Promise<Account[]> {

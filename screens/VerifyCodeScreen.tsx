@@ -9,12 +9,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
-// Iconos simples usando texto
-const ArrowLeftIcon = () => <Text style={{ fontSize: 24, color: '#0E5FCE' }}>←</Text>;
-const LockIcon = () => <Text style={{ fontSize: 64, color: '#0E5FCE' }}>🔒</Text>;
-const ClockIcon = () => <Text style={{ fontSize: 16, color: '#666666' }}>⏰</Text>;
+import { fonts } from '../src/config/fonts';
 import { apiClient } from '../src/services/api';
 
 interface VerifyCodeScreenProps {
@@ -79,7 +77,7 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
     setLoading(true);
 
     try {
-      const response = await apiClient.post('/api/users/verify-reset-code', {
+      const response = await apiClient.post('/users/verify-reset-code', {
         email,
         code: codeString
       });
@@ -112,7 +110,7 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
     setLoading(true);
 
     try {
-      const response = await apiClient.post('/api/users/forgot-password', {
+      const response = await apiClient.post('/users/forgot-password', {
         email
       });
 
@@ -143,21 +141,21 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <ArrowLeftIcon />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Verificar Código</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Logo Section */}
+        <View style={styles.logoSection}>
+          <Image 
+            source={require('../assets/design/icons/kiki_login.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
 
-        {/* Content */}
-        <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <LockIcon />
-          </View>
-
+        {/* Form Section */}
+        <View style={styles.formSection}>
           <Text style={styles.title}>Verifica tu código</Text>
           
           <Text style={styles.description}>
@@ -191,7 +189,6 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
 
           {/* Timer */}
           <View style={styles.timerContainer}>
-            <ClockIcon />
             <Text style={styles.timerText}>
               {timeLeft > 0 ? `Expira en ${formatTime(timeLeft)}` : 'Código expirado'}
             </Text>
@@ -221,15 +218,10 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
             </Text>
           </TouchableOpacity>
 
-          {/* Info Box */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>💡 Consejos:</Text>
-            <Text style={styles.infoText}>
-              • Revisa tu bandeja de entrada{'\n'}
-              • El código es de 6 dígitos{'\n'}
-              • Si no recibes el código, revisa spam
-            </Text>
-          </View>
+          {/* Back Button */}
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>Volver</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -239,68 +231,59 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0E5FCE',
   },
   scrollContainer: {
     flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 30,
+  },
+  logoSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    paddingTop: 80,
     paddingBottom: 40,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+  logoImage: {
+    width: 280,
+    height: 220,
   },
-  backButton: {
-    padding: 8,
-    marginRight: 16,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  content: {
+  formSection: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 40,
-  },
-  iconContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333333',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 16,
+    fontFamily: fonts.bold,
   },
   description: {
     fontSize: 16,
-    color: '#666666',
+    color: '#B3D4F1',
     textAlign: 'center',
     marginBottom: 8,
+    fontFamily: fonts.regular,
   },
   emailText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0E5FCE',
+    color: '#FF8C42',
     textAlign: 'center',
     marginBottom: 40,
+    fontFamily: fonts.bold,
   },
   codeContainer: {
     marginBottom: 24,
   },
   codeLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
+    color: '#B3D4F1',
     marginBottom: 16,
     textAlign: 'center',
+    fontFamily: fonts.regular,
   },
   codeInputs: {
     flexDirection: 'row',
@@ -311,38 +294,38 @@ const styles = StyleSheet.create({
     width: 45,
     height: 55,
     borderWidth: 2,
-    borderColor: '#E0E0E0',
+    borderColor: '#B3D4F1',
     borderRadius: 12,
     textAlign: 'center',
     fontSize: 24,
     fontWeight: 'bold',
     backgroundColor: '#FFFFFF',
+    color: '#0E5FCE',
   },
   timerContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
   },
   timerText: {
     fontSize: 14,
-    color: '#666666',
-    marginLeft: 6,
+    color: '#B3D4F1',
+    fontFamily: fonts.regular,
   },
   verifyButton: {
-    backgroundColor: '#0E5FCE',
+    backgroundColor: '#FF8C42',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 16,
   },
   verifyButtonDisabled: {
-    backgroundColor: '#B3D4F1',
+    backgroundColor: '#FFB299',
   },
   verifyButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
   },
   resendButton: {
     paddingVertical: 12,
@@ -353,30 +336,23 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   resendButtonText: {
-    color: '#0E5FCE',
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: fonts.regular,
   },
   resendButtonTextDisabled: {
-    color: '#999999',
+    color: '#B3D4F1',
   },
-  infoBox: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#0E5FCE',
+  backButton: {
+    alignItems: 'center',
+    marginTop: 20,
   },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 8,
-  },
-  infoText: {
+  backButtonText: {
     fontSize: 14,
-    color: '#666666',
-    lineHeight: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    opacity: 0.8,
+    fontFamily: fonts.regular,
   },
 });
 

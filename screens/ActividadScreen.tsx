@@ -14,7 +14,7 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useStudents } from '../src/hooks/useStudents';
-import { API_BASE_URL } from '../src/config/apiConfig';
+import { API_FULL_URL } from '../src/config/apiConfig';
 import CommonHeader from '../components/CommonHeader';
 import { useCustomAlert } from '../src/hooks/useCustomAlert';
 import CustomAlert from '../components/CustomAlert';
@@ -186,12 +186,12 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
           name: image.fileName || 'image.jpg'
         });
 
-        console.log('URL de upload:', `${API_BASE_URL}/upload/s3/image`);
+        console.log('URL de upload:', `${API_FULL_URL}/upload/s3/image`);
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
 
-        const response = await fetch(`${API_BASE_URL}/upload/s3/image`, {
+        const response = await fetch(`${API_FULL_URL}/upload/s3/image`, {
           method: 'POST',
           body: formData,
           headers: {
@@ -275,12 +275,12 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
       };
 
       console.log('Datos de actividad a enviar:', activityData);
-      console.log('URL de actividades:', `${API_BASE_URL}/activities`);
+      console.log('URL de actividades:', `${API_FULL_URL}/activities`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
 
-      const response = await fetch(`${API_BASE_URL}/activities`, {
+      const response = await fetch(`${API_FULL_URL}/activities`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../src/hooks/useNotifications';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 
 interface CommonHeaderProps {
@@ -24,6 +25,7 @@ interface CommonHeaderProps {
 const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpenMenu, activeStudent }) => {
   const { selectedInstitution, userAssociations } = useInstitution();
   const { user } = useAuth();
+  const { unreadCount } = useNotifications();
 
   // Debug logs
   console.log('🔍 [CommonHeader] Props recibidas:', {
@@ -88,6 +90,16 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
             style={[styles.messageIconImage, {}]}
             resizeMode="contain"
           />
+          {/* Badge de notificaciones sin leer */}
+          {user?.role?.nombre === 'familyadmin' || user?.role?.nombre === 'familyviewer' ? (
+            unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )
+          ) : null}
         </TouchableOpacity>
       </View>
 
@@ -234,6 +246,25 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 30,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#FF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
 

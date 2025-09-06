@@ -18,11 +18,10 @@ import CustomAlert from '../components/CustomAlert';
 import { useCustomAlert } from '../src/hooks/useCustomAlert';
 
 interface LoginScreenProps {
-  onShowRegister?: () => void;
   onShowForgotPassword?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onShowRegister, onShowForgotPassword }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -80,11 +79,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowRegister, onShowForgotP
     }
   };
 
-  const handleRegister = () => {
-    if (onShowRegister) {
-      onShowRegister();
-    }
-  };
+
 
   return (
     <>
@@ -164,11 +159,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowRegister, onShowForgotP
           </TouchableOpacity>
 
           <View style={styles.bottomButtonsContainer}>
-            <TouchableOpacity onPress={handleRegister}>
-              <Text style={styles.bottomText}>
-                ¿Estás Registrado?
-              </Text>
-            </TouchableOpacity>
             <TouchableOpacity onPress={handleForgotPassword}>
               <Text style={styles.bottomText}>
                 ¿Olvidaste tu contraseña?
@@ -271,7 +261,7 @@ const styles = StyleSheet.create({
   },
   bottomButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
   },

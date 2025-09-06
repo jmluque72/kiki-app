@@ -16,6 +16,7 @@ import { apiClient } from '../src/services/api';
 import CommonHeader from '../components/CommonHeader';
 import { useCustomAlert } from '../src/hooks/useCustomAlert';
 import CustomAlert from '../components/CustomAlert';
+import QRScanner from '../components/QRScanner';
 
 const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
@@ -29,6 +30,10 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
 
   // Estado para manejar la asistencia de cada alumno
   const [attendance, setAttendance] = useState<{ [key: string]: boolean }>({});
+  
+  // Estado para el escáner QR
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  
 
   // Función para marcar/desmarcar asistencia
   const toggleAttendance = (studentId: string) => {
@@ -36,6 +41,28 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
       ...prev,
       [studentId]: !prev[studentId]
     }));
+  };
+
+  // Función para manejar estudiante encontrado por QR
+  const handleStudentFoundByQR = (student: any) => {
+    console.log('🔍 [ASISTENCIA] Estudiante encontrado por QR:', student);
+    
+    // Verificar si el estudiante pertenece a la división actual
+    if (student.division._id !== selectedInstitution?.division?._id) {
+      showError('Este estudiante no pertenece a la división actual');
+      return;
+    }
+    
+    // Marcar/desmarcar asistencia del estudiante
+    toggleAttendance(student._id);
+    
+    // Mostrar mensaje de confirmación
+    const isPresent = attendance[student._id];
+    const message = isPresent 
+      ? `${student.nombre} ${student.apellido} marcado como presente`
+      : `${student.nombre} ${student.apellido} marcado como ausente`;
+    
+    showSuccess(message);
   };
 
   // Función para marcar/desmarcar todos los alumnos
@@ -163,12 +190,24 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
   // Consultar asistencia por fecha al cargar la pantalla
   useEffect(() => {
     console.log('🚀 [FRONTEND] useEffect se ejecutó!');
+    console.log('🔍 [FRONTEND] Dependencias:', {
+      accountId: selectedInstitution?.account?._id,
+      divisionId: selectedInstitution?.division?._id,
+      studentsLength: students.length
+    });
+    
     const fetchAsistenciaPorFecha = async () => {
       console.log('🔍 [FRONTEND] Iniciando fetchAsistenciaPorFecha...');
       console.log('🔍 [FRONTEND] selectedInstitution:', selectedInstitution);
+      console.log('🔍 [FRONTEND] students cargados:', students.length);
       
       if (!selectedInstitution?.account?._id || !selectedInstitution?.division?._id) {
         console.log('❌ [FRONTEND] No hay institución seleccionada');
+        return;
+      }
+      
+      if (students.length === 0) {
+        console.log('❌ [FRONTEND] No hay estudiantes cargados aún');
         return;
       }
       
@@ -195,20 +234,22 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
         console.log('🔍 [FRONTEND] Respuesta del servidor:', response.data);
         console.log('🔍 [FRONTEND] response.data.success:', response.data.success);
         console.log('🔍 [FRONTEND] response.data.data:', response.data.data);
-        console.log('🔍 [FRONTEND] Condición completa:', response.data.success && response.data.data);
+        
         if (response.data.success && response.data.data) {
           const asistencia = response.data.data;
           console.log('🔍 [FRONTEND] Asistencia encontrada:', asistencia);
           console.log('🔍 [FRONTEND] Estudiantes en asistencia:', asistencia.estudiantes);
+          
           const newAttendance: { [key: string]: boolean } = {};
           asistencia.estudiantes.forEach((e: any) => {
-
             console.log('🔍 [FRONTEND] Procesando estudiante:', e.student, 'presente:', e.presente);
             newAttendance[e.student] = e.presente;
           });
-                      console.log('🔍 [FRONTEND] newAttendance length:', Object.keys(newAttendance).length);
+          
+          console.log('🔍 [FRONTEND] newAttendance length:', Object.keys(newAttendance).length);
           console.log('🔍 [FRONTEND] newAttendance final:', newAttendance);
           console.log('🔍 [FRONTEND] students disponibles:', students.map(s => ({ id: s._id, nombre: s.nombre })));
+          
           setAttendance(newAttendance);
         } else {
           console.log('🔍 [FRONTEND] No hay asistencia para hoy o respuesta inválida');
@@ -221,7 +262,11 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
         setAttendance({});
       }
     };
-    fetchAsistenciaPorFecha();
+    
+    // Solo ejecutar si tenemos estudiantes cargados
+    if (students.length > 0) {
+      fetchAsistenciaPorFecha();
+    }
   }, [selectedInstitution?.account?._id, selectedInstitution?.division?._id, students.length]);
 
   return (
@@ -313,6 +358,14 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
           )}
         </View>
 
+        {/* Botón Escáner QR */}
+        <TouchableOpacity 
+          style={styles.qrButton}
+          onPress={() => setShowQRScanner(true)}
+        >
+          <Text style={styles.qrButtonText}>📱 Escanear QR</Text>
+        </TouchableOpacity>
+
         {/* Botón Guardar Asistencia */}
         <TouchableOpacity 
           style={styles.modificarButton}
@@ -332,6 +385,13 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
         type={alertConfig?.type}
         onConfirm={alertConfig?.onConfirm}
         onCancel={alertConfig?.onCancel}
+      />
+      
+      {/* QR Scanner */}
+      <QRScanner
+        visible={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        onStudentFound={handleStudentFoundByQR}
       />
     </View>
   );
@@ -536,6 +596,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+  },
+  // Estilos para botón QR
+  qrButton: {
+    backgroundColor: '#0E5FCE',
+    paddingVertical: 15,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 15,
+  },
+  qrButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

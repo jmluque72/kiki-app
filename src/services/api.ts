@@ -1,10 +1,10 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, API_TIMEOUT, DEFAULT_HEADERS } from '../config/apiConfig';
+import { API_FULL_URL, API_TIMEOUT, DEFAULT_HEADERS } from '../config/apiConfig';
 
 // Crear instancia de axios con configuración base
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_FULL_URL,
   timeout: API_TIMEOUT,
   headers: DEFAULT_HEADERS,
 });
@@ -91,21 +91,7 @@ export interface User {
   status: string;
 }
 
-// Tipos para registro mobile
-export interface RegisterMobileRequest {
-  email: string;
-  password: string;
-  nombre: string;
-  apellido?: string;
-  telefono?: string;
-}
 
-export interface RegisterMobileResponse {
-  user: User;
-  associationsCreated?: number;
-  message?: string;
-  // No incluir token ya que el registro mobile no debe loguear automáticamente
-}
 
 // Tipos para login
 export interface LoginRequest {

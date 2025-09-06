@@ -27,7 +27,7 @@ export const useNotifications = (): UseNotificationsReturn => {
   const [error, setError] = useState<string | null>(null);
 
   const unreadCount = notifications.filter(notification => 
-    !notification.readBy.some(read => read.user === 'currentUserId') // TODO: Get current user ID
+    !notification.readBy.some(read => read.user === user?._id)
   ).length;
 
   const loadNotifications = useCallback(async () => {

@@ -33,6 +33,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     type: 'informacion' as 'informacion' | 'comunicacion',
     recipients: [] as string[]
   });
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedNotificationDetails, setSelectedNotificationDetails] = useState<any>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   const { notifications, recipients, loading, markAsRead, deleteNotification, sendNotification, loadRecipients, loadNotifications } = useNotifications();
   const { selectedInstitution } = useInstitution();
@@ -119,6 +122,20 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         }
       ]
     );
+  };
+
+  const handleShowDetails = async (notificationId: string) => {
+    try {
+      setLoadingDetails(true);
+      const { NotificationService } = await import('../src/services/notificationService');
+      const details = await NotificationService.getNotificationDetails(notificationId);
+      setSelectedNotificationDetails(details);
+      setShowDetailsModal(true);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Error al cargar detalles de la notificación');
+    } finally {
+      setLoadingDetails(false);
+    }
   };
 
   // Función para verificar si una notificación está leída
@@ -268,12 +285,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
               <Text style={styles.typeText}>{item.type.toUpperCase()}</Text>
             </View>
           </View>
+          
           <Text style={[
             styles.notificationMessage,
             !isRead && styles.notificationMessageUnread
           ]}>
             {item.message}
           </Text>
+          
           <Text style={styles.notificationDate}>
             {new Date(item.sentAt).toLocaleDateString('es-ES', {
               day: 'numeric',
@@ -285,9 +304,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
           </Text>
         </TouchableOpacity>
         
-        {/* Botón de eliminar para coordinadores */}
+        {/* Botones para coordinadores */}
         {isCoordinador && (
-          <View style={styles.deleteButtonContainer}>
+          <View style={styles.coordinatorButtonsContainer}>
+            <TouchableOpacity
+              style={styles.detailsButton}
+              onPress={() => handleShowDetails(item._id)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.detailsButtonText}>Ver Detalles</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
               onPress={() => handleDeleteNotification(item._id)}
@@ -538,6 +564,142 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
 
       {/* Success Popup */}
       {/* SuccessPopup component is no longer used, so this block is removed */}
+      
+      {/* Modal de detalles de notificación */}
+      <Modal
+        visible={showDetailsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowDetailsModal(false)}
+      >
+        <View style={styles.detailsModalContainer}>
+          <View style={styles.detailsModalHeader}>
+            <Text style={styles.detailsModalTitle}>Detalles de la Notificación</Text>
+            <TouchableOpacity
+              style={styles.detailsModalCloseButton}
+              onPress={() => setShowDetailsModal(false)}
+            >
+              <Text style={styles.detailsModalCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.detailsModalContent}>
+            {loadingDetails ? (
+              <Text style={styles.loadingText}>Cargando detalles...</Text>
+            ) : selectedNotificationDetails ? (
+              <View>
+                {/* Información básica */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Información General</Text>
+                  <View style={styles.detailsItem}>
+                    <Text style={styles.detailsLabel}>Título:</Text>
+                    <Text style={styles.detailsValue}>{selectedNotificationDetails.title}</Text>
+                  </View>
+                  <View style={styles.detailsItem}>
+                    <Text style={styles.detailsLabel}>Mensaje:</Text>
+                    <Text style={styles.detailsValue}>{selectedNotificationDetails.message}</Text>
+                  </View>
+                  <View style={styles.detailsItem}>
+                    <Text style={styles.detailsLabel}>Tipo:</Text>
+                    <Text style={styles.detailsValue}>{selectedNotificationDetails.type.toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.detailsItem}>
+                    <Text style={styles.detailsLabel}>Enviado por:</Text>
+                    <Text style={styles.detailsValue}>{selectedNotificationDetails.sender?.nombre}</Text>
+                  </View>
+                  <View style={styles.detailsItem}>
+                    <Text style={styles.detailsLabel}>Fecha de envío:</Text>
+                    <Text style={styles.detailsValue}>
+                      {new Date(selectedNotificationDetails.sentAt).toLocaleDateString('es-ES', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Estadísticas de lectura */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Estadísticas de Lectura</Text>
+                  <View style={styles.readStatsContainer}>
+                    <View style={styles.readStatItem}>
+                      <Text style={styles.readStatLabel}>Total destinatarios:</Text>
+                      <Text style={styles.readStatValue}>{selectedNotificationDetails.stats?.totalRecipients || selectedNotificationDetails.recipients?.length || 0}</Text>
+                    </View>
+                    <View style={styles.readStatItem}>
+                      <Text style={[styles.readStatLabel, { color: '#4CAF50' }]}>Leídas por padres:</Text>
+                      <Text style={[styles.readStatValue, { color: '#4CAF50' }]}>{selectedNotificationDetails.stats?.readByParents || 0}</Text>
+                    </View>
+                    <View style={styles.readStatItem}>
+                      <Text style={[styles.readStatLabel, { color: '#FF5722' }]}>Pendientes:</Text>
+                      <Text style={[styles.readStatValue, { color: '#FF5722' }]}>
+                        {selectedNotificationDetails.stats?.pendingRecipients || 0}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Lista de destinatarios que leyeron (solo padres) */}
+                {selectedNotificationDetails.readBy && selectedNotificationDetails.readBy.length > 0 && (
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.detailsSectionTitle}>Leída por padres:</Text>
+                    <View style={styles.readByList}>
+                      {selectedNotificationDetails.readBy
+                        .filter((read: any) => read.user?.role?.nombre !== 'coordinador')
+                        .map((read: any, index: number) => (
+                          <View key={index} style={styles.readByItem}>
+                            <Text style={styles.readByUser}>
+                              {read.user?.nombre || 'Usuario desconocido'}
+                            </Text>
+                            <Text style={styles.readByDate}>
+                              {new Date(read.readAt).toLocaleDateString('es-ES', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </Text>
+                          </View>
+                        ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Lista de destinatarios pendientes (estudiantes cuyos padres no leyeron) */}
+                {selectedNotificationDetails.pendingRecipients && selectedNotificationDetails.pendingRecipients.length > 0 && (
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.detailsSectionTitle}>Pendiente de lectura:</Text>
+                    <View style={styles.unreadByList}>
+                      {selectedNotificationDetails.pendingRecipients.map((recipient: any, index: number) => (
+                        <View key={index} style={styles.unreadByItem}>
+                          <View style={styles.pendingStudentInfo}>
+                            <Text style={styles.pendingStudentName}>
+                              {recipient.nombre || recipient.name || 'Usuario desconocido'}
+                            </Text>
+                            {recipient.tutor && (
+                              <Text style={styles.pendingTutorInfo}>
+                                Tutor: {recipient.tutor.name} ({recipient.tutor.email})
+                              </Text>
+                            )}
+                            {!recipient.tutor && (
+                              <Text style={styles.pendingNoTutorInfo}>
+                                Sin tutor asignado
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            ) : null}
+          </ScrollView>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -930,8 +1092,8 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: '#FF6B6B',
     borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     alignItems: 'center',
     shadowColor: '#FF6B6B',
     shadowOffset: { width: 0, height: 2 },
@@ -943,6 +1105,200 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  // Estilos para información adicional de coordinadores
+  coordinatorInfo: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  readStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 15,
+    paddingVertical: 10,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+  },
+  readStatItem: {
+    alignItems: 'center',
+  },
+  readStatLabel: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  readStatValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  readByContainer: {
+    marginBottom: 15,
+  },
+  readByTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginBottom: 8,
+  },
+  readByList: {
+    backgroundColor: '#F1F8E9',
+    borderRadius: 8,
+    padding: 10,
+  },
+  readByItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8F5E8',
+  },
+  readByUser: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '500',
+  },
+  readByDate: {
+    fontSize: 11,
+    color: '#4CAF50',
+    fontStyle: 'italic',
+  },
+  unreadByContainer: {
+    marginBottom: 10,
+  },
+  unreadByTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF5722',
+    marginBottom: 8,
+  },
+  unreadByList: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    padding: 10,
+  },
+  unreadByItem: {
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE0B2',
+  },
+  unreadByUser: {
+    fontSize: 13,
+    color: '#D84315',
+    fontWeight: '500',
+  },
+  pendingStudentInfo: {
+    flex: 1,
+  },
+  pendingStudentName: {
+    fontSize: 14,
+    color: '#D84315',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  pendingTutorInfo: {
+    fontSize: 12,
+    color: '#666666',
+    fontStyle: 'italic',
+  },
+  pendingNoTutorInfo: {
+    fontSize: 12,
+    color: '#FF9800',
+    fontStyle: 'italic',
+  },
+  // Estilos para botones de coordinadores
+  coordinatorButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+    marginHorizontal: 15,
+    marginBottom: 10,
+    gap: 10,
+  },
+  detailsButton: {
+    flex: 1,
+    backgroundColor: '#0E5FCE',
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    shadowColor: '#0E5FCE',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  detailsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  // Estilos para el modal de detalles
+  detailsModalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  detailsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#F8F9FA',
+  },
+  detailsModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  detailsModalCloseButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsModalCloseText: {
+    fontSize: 16,
+    color: '#666666',
+    fontWeight: 'bold',
+  },
+  detailsModalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  detailsSection: {
+    marginBottom: 25,
+  },
+  detailsSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: '#0E5FCE',
+    paddingBottom: 5,
+  },
+  detailsItem: {
+    marginBottom: 12,
+  },
+  detailsLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666666',
+    marginBottom: 4,
+  },
+  detailsValue: {
+    fontSize: 15,
+    color: '#333333',
+    lineHeight: 20,
   },
 });
 

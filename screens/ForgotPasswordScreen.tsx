@@ -9,12 +9,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
-// Iconos simples usando texto
-const ArrowLeftIcon = () => <Text style={{ fontSize: 24, color: '#0E5FCE' }}>←</Text>;
-const MailIcon = () => <Text style={{ fontSize: 64, color: '#0E5FCE' }}>📧</Text>;
-const AlertCircleIcon = () => <Text style={{ fontSize: 16, color: '#FF4444' }}>⚠️</Text>;
+import { fonts } from '../src/config/fonts';
 import { apiClient } from '../src/services/api';
 
 interface ForgotPasswordScreenProps {
@@ -48,7 +46,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
     setLoading(true);
 
     try {
-      const response = await apiClient.post('/api/users/forgot-password', {
+      const response = await apiClient.post('/users/forgot-password', {
         email: email.trim().toLowerCase()
       });
 
@@ -99,21 +97,21 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <ArrowLeftIcon />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Recuperar Contraseña</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Logo Section */}
+        <View style={styles.logoSection}>
+          <Image 
+            source={require('../assets/design/icons/kiki_login.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
 
-        {/* Content */}
-        <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <MailIcon />
-          </View>
-
+        {/* Form Section */}
+        <View style={styles.formSection}>
           <Text style={styles.title}>¿Olvidaste tu contraseña?</Text>
           
           <Text style={styles.description}>
@@ -125,8 +123,9 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Email</Text>
             <TextInput
-              style={[styles.input, emailError ? styles.inputError : null]}
+              style={styles.input}
               placeholder="tu@email.com"
+              placeholderTextColor="#B3D4F1"
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
@@ -137,11 +136,9 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
               autoCorrect={false}
               editable={!loading}
             />
+            <View style={styles.inputLine} />
             {emailError ? (
-              <View style={styles.errorContainer}>
-                <AlertCircleIcon />
-                <Text style={styles.errorText}>{emailError}</Text>
-              </View>
+              <Text style={styles.errorText}>{emailError}</Text>
             ) : null}
           </View>
 
@@ -158,15 +155,10 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
             )}
           </TouchableOpacity>
 
-          {/* Info Box */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>ℹ️ Información importante:</Text>
-            <Text style={styles.infoText}>
-              • El código expira en 10 minutos{'\n'}
-              • Revisa tu carpeta de spam{'\n'}
-              • Si no recibes el código, intenta nuevamente
-            </Text>
-          </View>
+          {/* Back Button */}
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>Volver al Login</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -176,117 +168,101 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0E5FCE',
   },
   scrollContainer: {
     flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 30,
+  },
+  logoSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    paddingTop: 80,
     paddingBottom: 40,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+  logoImage: {
+    width: 280,
+    height: 220,
   },
-  backButton: {
-    padding: 8,
-    marginRight: 16,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  content: {
+  formSection: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 40,
-  },
-  iconContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333333',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 16,
+    fontFamily: fonts.bold,
   },
   description: {
     fontSize: 16,
-    color: '#666666',
+    color: '#B3D4F1',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 40,
     paddingHorizontal: 20,
+    fontFamily: fonts.regular,
   },
   inputContainer: {
-    marginBottom: 24,
+    marginBottom: 25,
   },
   inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
+    fontSize: 18,
+    color: '#B3D4F1',
+    marginBottom: 2,
+    fontFamily: fonts.regular,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
     fontSize: 16,
-    backgroundColor: '#FFFFFF',
+    color: '#FFFFFF',
+    paddingVertical: 6,
+    paddingHorizontal: 0,
   },
-  inputError: {
-    borderColor: '#FF4444',
-  },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
+  inputLine: {
+    height: 1,
+    backgroundColor: '#B3D4F1',
+    marginTop: 1,
   },
   errorText: {
-    color: '#FF4444',
+    color: '#FF8C42',
     fontSize: 14,
-    marginLeft: 6,
+    marginTop: 8,
+    fontFamily: fonts.regular,
   },
   sendButton: {
-    backgroundColor: '#0E5FCE',
-    borderRadius: 12,
+    backgroundColor: '#FF8C42',
     paddingVertical: 16,
+    paddingHorizontal: 30,
+    borderRadius: 5,
     alignItems: 'center',
-    marginBottom: 24,
+    marginTop: 50,
+    marginBottom: 30,
+    marginHorizontal: 0,
+    height: 50,
   },
   sendButtonDisabled: {
-    backgroundColor: '#B3D4F1',
+    backgroundColor: '#FFB299',
   },
   sendButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    textAlign: 'center',
   },
-  infoBox: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#0E5FCE',
+  backButton: {
+    alignItems: 'center',
+    marginTop: 20,
   },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 8,
-  },
-  infoText: {
+  backButtonText: {
     fontSize: 14,
-    color: '#666666',
-    lineHeight: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    opacity: 0.8,
+    fontFamily: fonts.regular,
   },
 });
 
