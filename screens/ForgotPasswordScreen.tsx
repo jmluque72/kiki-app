@@ -135,6 +135,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              selectionColor="#FFFFFF"
             />
             <View style={styles.inputLine} />
             {emailError ? (

@@ -12,8 +12,32 @@ import {
   ActivityIndicator,
   Image
 } from 'react-native';
+import Svg, { Path, Circle } from 'react-native-svg';
+import { toastService } from '../src/services/toastService';
 import { fonts } from '../src/config/fonts';
 import { apiClient } from '../src/services/api';
+
+// Componente de icono de ojo
+const EyeIcon = ({ size = 20, isVisible = false }: { size?: number; isVisible?: boolean }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 4C16.418 4 20.418 6.586 22 11C20.418 15.414 16.418 18 12 18C7.582 18 3.582 15.414 2 11C3.582 6.586 7.582 4 12 4Z"
+      stroke={isVisible ? "#9CA3AF" : "#FFFFFF"}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Circle
+      cx="12"
+      cy="11"
+      r="3"
+      stroke={isVisible ? "#9CA3AF" : "#FFFFFF"}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
 
 interface ResetPasswordScreenProps {
   email: string;
@@ -107,15 +131,23 @@ const ResetPasswordScreen: React.FC<ResetPasswordScreenProps> = ({
       console.error('Error reseteando contraseña:', error);
       
       if (error.response?.status === 400) {
-        Alert.alert(
+        toastService.error(
           'Código Inválido',
-          'El código de verificación no es válido o ha expirado. Por favor, solicita un nuevo código.'
+          'El código de verificación no es válido o ha expirado. Serás redirigido al inicio.'
         );
+        // Redirigir al inicio después de mostrar el toast
+        setTimeout(() => {
+          onBack();
+        }, 2000);
       } else {
-        Alert.alert(
+        toastService.error(
           'Error',
-          error.response?.data?.message || 'Error al actualizar la contraseña'
+          error.response?.data?.message || 'Error al actualizar la contraseña. Serás redirigido al inicio.'
         );
+        // Redirigir al inicio después de mostrar el toast
+        setTimeout(() => {
+          onBack();
+        }, 2000);
       }
     } finally {
       setLoading(false);
@@ -161,14 +193,13 @@ const ResetPasswordScreen: React.FC<ResetPasswordScreenProps> = ({
                 onChangeText={handlePasswordChange}
                 secureTextEntry={!showPassword}
                 editable={!loading}
+                selectionColor="#FFFFFF"
               />
               <TouchableOpacity
                 style={styles.eyeButton}
                 onPress={() => setShowPassword(!showPassword)}
               >
-                <Text style={styles.eyeButtonText}>
-                  {showPassword ? '🙈' : '👁️'}
-                </Text>
+                <EyeIcon size={20} isVisible={showPassword} />
               </TouchableOpacity>
             </View>
             <View style={styles.inputLine} />
@@ -189,14 +220,13 @@ const ResetPasswordScreen: React.FC<ResetPasswordScreenProps> = ({
                 onChangeText={handleConfirmPasswordChange}
                 secureTextEntry={!showConfirmPassword}
                 editable={!loading}
+                selectionColor="#FFFFFF"
               />
               <TouchableOpacity
                 style={styles.eyeButton}
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
               >
-                <Text style={styles.eyeButtonText}>
-                  {showConfirmPassword ? '🙈' : '👁️'}
-                </Text>
+                <EyeIcon size={20} isVisible={showConfirmPassword} />
               </TouchableOpacity>
             </View>
             <View style={styles.inputLine} />
@@ -264,27 +294,26 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'space-between',
     paddingHorizontal: 30,
+    paddingBottom: 40,
   },
   logoSection: {
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingTop: 80,
-    paddingBottom: 40,
+    paddingTop: 60,
+    paddingBottom: 20,
   },
   logoImage: {
-    width: 280,
-    height: 220,
+    width: 120,
+    height: 120,
   },
   formSection: {
     flex: 1,
-    justifyContent: 'center',
-    paddingVertical: 40,
+    justifyContent: 'flex-start',
+    paddingVertical: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 16,
@@ -295,17 +324,17 @@ const styles = StyleSheet.create({
     color: '#B3D4F1',
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 40,
-    paddingHorizontal: 20,
+    marginBottom: 30,
+    paddingHorizontal: 10,
     fontFamily: fonts.regular,
   },
   inputContainer: {
     marginBottom: 25,
   },
   inputLabel: {
-    fontSize: 18,
-    color: '#B3D4F1',
-    marginBottom: 2,
+    fontSize: 16,
+    color: '#FFFFFF',
+    marginBottom: 8,
     fontFamily: fonts.regular,
   },
   passwordContainer: {
@@ -314,19 +343,16 @@ const styles = StyleSheet.create({
   passwordInput: {
     fontSize: 16,
     color: '#FFFFFF',
-    paddingVertical: 6,
+    paddingVertical: 12,
     paddingHorizontal: 0,
     paddingRight: 50,
+    fontFamily: fonts.regular,
   },
   eyeButton: {
     position: 'absolute',
-    right: 16,
-    top: 14,
-    padding: 4,
-  },
-  eyeButtonText: {
-    fontSize: 20,
-    color: '#B3D4F1',
+    right: 0,
+    top: 12,
+    padding: 8,
   },
   inputLine: {
     height: 1,
@@ -340,29 +366,29 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
   },
   requirementsContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
+    padding: 20,
+    marginBottom: 30,
   },
   requirementsTitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#FFFFFF',
-    marginBottom: 12,
+    marginBottom: 16,
     fontFamily: fonts.bold,
   },
   requirementItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   requirementIcon: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#B3D4F1',
-    marginRight: 8,
+    marginRight: 12,
   },
   requirementText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#B3D4F1',
     fontFamily: fonts.regular,
   },
@@ -373,16 +399,24 @@ const styles = StyleSheet.create({
   resetButton: {
     backgroundColor: '#FF8C42',
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
   },
   resetButtonDisabled: {
     backgroundColor: '#FFB299',
   },
   resetButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: fonts.bold,
   },
   infoBox: {

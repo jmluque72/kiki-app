@@ -6,7 +6,9 @@ import {
   Image,
   StyleSheet,
   RefreshControl,
-  TouchableOpacity
+  TouchableOpacity,
+  Modal,
+  Alert
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -15,10 +17,11 @@ import CommonHeader from '../components/CommonHeader';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 import ActivityDetailModal from '../components/ActivityDetailModal';
+import CustomCalendar from '../components/CustomCalendar';
 
 const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
-  const { user } = useAuth();
+  const { user, activeAssociation } = useAuth();
   
   // Usar la primera institución si no hay ninguna seleccionada
   const effectiveInstitution = selectedInstitution || (userAssociations.length > 0 ? userAssociations[0] : null);
@@ -36,7 +39,8 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   
   const { activities, loading, error, refetch } = useActivities(
     effectiveInstitution?.account._id,
-    effectiveInstitution?.division?._id
+    effectiveInstitution?.division?._id,
+    selectedDate
   );
 
   // Estado para el pull-to-refresh
@@ -45,6 +49,10 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   // Estado para el modal de detalles de actividad
   const [selectedActivity, setSelectedActivity] = React.useState<any>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
+  
+  // Estado para el calendario
+  const [calendarVisible, setCalendarVisible] = React.useState(false);
+  const [selectedDate, setSelectedDate] = React.useState<Date | null>(null);
   
   // Debug del estado del modal
   React.useEffect(() => {
@@ -115,22 +123,26 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   };
 
   const handleActivityPress = (activity: any) => {
-    console.log('🔍 [InicioScreen] Actividad seleccionada:', activity._id);
-    console.log('🔍 [InicioScreen] Datos de la actividad:', {
-      titulo: activity.titulo,
-      descripcion: activity.descripcion,
-      imagenes: activity.imagenes?.length || 0,
-      participantes: activity.participantes
-    });
-    console.log('🔍 [InicioScreen] Abriendo modal...');
     setSelectedActivity(activity);
     setModalVisible(true);
-    console.log('🔍 [InicioScreen] Modal abierto:', { modalVisible: true, selectedActivity: activity._id });
   };
 
   const handleCloseModal = () => {
     setModalVisible(false);
     setSelectedActivity(null);
+  };
+
+  const handleCalendarPress = () => {
+    setCalendarVisible(true);
+  };
+
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    setCalendarVisible(false);
+  };
+
+  const handleClearDate = () => {
+    setSelectedDate(null);
   };
 
   const handleEditActivity = (activityId: string) => {
@@ -210,6 +222,8 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
       
       <ScrollView 
         style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -221,18 +235,32 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
       >
         {/* Sección de fecha */}
         <View style={styles.dateSection}>
-          <Text style={styles.dateText}>{new Date().toLocaleDateString('es-ES', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric'
-          })}</Text>
-          <View style={styles.calendarIcon}>
+          <Text style={styles.dateText}>
+            {selectedDate 
+              ? selectedDate.toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })
+              : new Date().toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })
+            }
+          </Text>
+          <TouchableOpacity style={styles.calendarIcon} onPress={handleCalendarPress}>
             <Image
               source={require('../assets/design/icons/calendar.png')}
               style={[styles.calendarIconImage]}
               resizeMode="contain"
             />
-          </View>
+          </TouchableOpacity>
+          {selectedDate && (
+            <TouchableOpacity style={styles.clearDateButton} onPress={handleClearDate}>
+              <Text style={styles.clearDateText}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Timeline de actividades */}
@@ -267,11 +295,19 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                     
                     {/* Mostrar primera imagen o ícono por defecto */}
                     {(activity as any).imagenes && (activity as any).imagenes.length > 0 ? (
-                      <Image 
-                        source={{ uri: (activity as any).imagenes[0] }}
-                        style={styles.timelineImage}
-                        resizeMode="cover"
-                      />
+                      <View style={styles.timelineImageContainer}>
+                        <Image 
+                          source={{ uri: (activity as any).imagenes[0] }}
+                          style={styles.timelineImage}
+                          resizeMode="cover"
+                        />
+                        {/* Contador de imágenes múltiples */}
+                        {(activity as any).imagenes.length > 1 && (
+                          <View style={styles.imageCountBadge}>
+                            <Text style={styles.imageCountText}>+{(activity as any).imagenes.length - 1}</Text>
+                          </View>
+                        )}
+                      </View>
                     ) : (
                       <View style={styles.timelineIcon}>
                         <Text style={styles.timelineIconText}>
@@ -283,12 +319,11 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                   
                   {/* Columna del contenido */}
                   <View style={styles.contentColumn}>
-                    <Text style={styles.timelineTitle} numberOfLines={2}>
-                      {activity.descripcion}
+                    <Text style={styles.timelineTitle} numberOfLines={1}>
+                      {activity.titulo}
                     </Text>
-                    <Text style={styles.timelineLocation}>
-                      {activity.account?.nombre || getInstitutionName()}
-                      {activity.division && ` - ${activity.division.nombre}`}
+                    <Text style={styles.timelineDescription} numberOfLines={2}>
+                      {activity.descripcion}
                     </Text>
                     <Text style={styles.timelineDate}>
                       {formatDate(activity.createdAt)}
@@ -308,11 +343,26 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         <ActivityDetailModal
           visible={modalVisible}
           activity={selectedActivity}
-          userRole={user?.role?.nombre || ''}
+          userRole={activeAssociation?.role?.nombre || ''}
           onClose={handleCloseModal}
           onEdit={handleEditActivity}
         />
       )}
+
+      {/* Modal del calendario */}
+      <Modal
+        visible={calendarVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setCalendarVisible(false)}
+      >
+        <View style={styles.calendarModalOverlay}>
+          <CustomCalendar
+            onDateSelect={handleDateSelect}
+            onClose={() => setCalendarVisible(false)}
+          />
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -325,6 +375,10 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flex: 1,
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    paddingBottom: 20,
   },
   dateSection: {
     flexDirection: 'row',
@@ -351,12 +405,12 @@ const styles = StyleSheet.create({
     height: 32,
   },
   timelineContainer: {
-    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 10,
-    paddingBottom: 20,
+    paddingBottom: 100, // Aumentar padding bottom para evitar que se tape con el tab bar
   },
   timelineTable: {
+    minHeight: 'auto',
   },
   timelineRow: {
     flexDirection: 'row',
@@ -380,9 +434,9 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   timelineIcon: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -398,15 +452,45 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   timelineIconText: {
-    fontSize: 18,
+    fontSize: 24,
     color: '#FFFFFF',
   },
+  timelineImageContainer: {
+    position: 'relative',
+  },
   timelineImage: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     borderWidth: 3,
     borderColor: '#FF8C42',
+  },
+  imageCountBadge: {
+    position: 'absolute',
+    bottom: -5,
+    right: -5,
+    backgroundColor: '#FF8C42',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  imageCountText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    textAlign: 'center',
   },
   borderCircle: {
     position: 'absolute',
@@ -428,11 +512,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 20,
   },
-  timelineLocation: {
+  timelineDescription: {
     fontSize: 14,
     fontFamily: fonts.regular,
     color: '#666666',
     marginBottom: 4,
+    lineHeight: 18,
   },
   timelineDate: {
     fontSize: 12,
@@ -555,6 +640,32 @@ const styles = StyleSheet.create({
     color: '#B3D4F1',
     fontFamily: fonts.bold,
     textAlign: 'center',
+  },
+
+  // Estilos para el calendario
+  clearDateButton: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FF6B6B',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearDateText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  // Estilos para el modal del calendario
+  calendarModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

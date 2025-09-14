@@ -8,6 +8,7 @@ export interface Event {
   hora: string;
   lugar?: string;
   estado: 'activo' | 'finalizado' | 'cancelado';
+  requiereAutorizacion?: boolean;
   creador: {
     _id: string;
     name: string;
@@ -30,6 +31,7 @@ export interface CreateEventRequest {
   fecha: string;
   hora: string;
   lugar?: string;
+  requiereAutorizacion?: boolean;
   institutionId?: string;
   divisionId?: string;
 }

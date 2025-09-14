@@ -20,19 +20,19 @@ export const getApiBaseUrl = () => {
   
   if (Platform.OS === 'android') {
     // Para emulador Android
-    return 'http://192.168.68.102:3000';
+    return 'http://192.168.68.107:3000';
   } else if (Platform.OS === 'ios') {
     // Para emulador iOS o dispositivo físico iOS
-    return 'http://192.168.68.102:3000';
+    return 'http://192.168.68.107:3000';
   }
   
   // Fallback
-  return 'http://192.168.68.102:3000';
+  return 'http://192.168.68.107:3000';
 };
 
 
 // Configuración base del API
-export const getApiBaseUrlServer = () => {
+export const getApiBaseUrlRemote = () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost

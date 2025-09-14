@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
 import { apiClient } from '../src/services/api';
+import { toastService } from '../src/services/toastService';
 
 interface VerifyCodeScreenProps {
   email: string;
@@ -85,18 +86,18 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
       if (response.data.success) {
         onCodeVerified(email, codeString);
       } else {
-        Alert.alert('Error', response.data.message || 'Código inválido');
+        toastService.error('Error', response.data.message || 'Código inválido');
       }
     } catch (error: any) {
       console.error('Error verificando código:', error);
       
       if (error.response?.status === 400) {
-        Alert.alert(
+        toastService.error(
           'Código Inválido',
           'El código ingresado no es correcto o ha expirado. Verifica el código o solicita uno nuevo.'
         );
       } else {
-        Alert.alert(
+        toastService.error(
           'Error',
           error.response?.data?.message || 'Error al verificar el código'
         );

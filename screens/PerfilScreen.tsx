@@ -6,17 +6,18 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Image,
   StyleSheet,
-  FlatList
+  FlatList,
+  Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useLoading } from '../contexts/LoadingContext';
 import { useAuth } from '../contexts/AuthContext';
+import { ActiveAssociationService } from '../src/services/activeAssociationService';
 import AddAssociationPopup from '../components/AddAssociationPopup';
 import CommonHeader from '../components/CommonHeader';
 import SideMenu from '../components/SideMenu';
@@ -25,7 +26,10 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { UserService } from '../src/services/userService';
 import PickupService, { Pickup } from '../src/services/pickupService';
 import SharedService, { Shared } from '../src/services/sharedService';
+import { toastService } from '../src/services/toastService';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
+import PushNotificationPreferences from '../components/PushNotificationPreferences';
+import ChangePasswordScreen from './ChangePasswordScreen';
 
 interface User {
   _id: string;
@@ -37,15 +41,12 @@ interface User {
   updatedAt: string;
 }
 
-const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
-  const { logout, user: authUser, login } = useAuth();
+const PerfilScreen = ({ onOpenNotifications, onOpenActiveAssociation }: { onOpenNotifications: () => void; onOpenActiveAssociation?: () => void }) => {
+  const { logout, user: authUser, login, activeAssociation, refreshActiveAssociation } = useAuth();
   
-  // Verificar si el usuario es familyadmin
-  const isFamilyAdmin = authUser?.role?.nombre === 'familyadmin';
+  // Verificar si el usuario es familyadmin (usando el rol activo)
+  const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
   
-  // Debug: Log del rol del usuario
-  console.log('🔍 [PerfilScreen] Rol del usuario:', authUser?.role?.nombre);
-  console.log('🔍 [PerfilScreen] isFamilyAdmin:', isFamilyAdmin);
   
   // Solo incluir 'quienRetira' en las opciones si el usuario es familyadmin
   const [activeTab, setActiveTab] = useState<'informacion' | 'asociaciones' | 'quienRetira'>('informacion');
@@ -67,7 +68,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   const [showMenu, setShowMenu] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const { showLoading, hideLoading } = useLoading();
-  const { selectedInstitution, userAssociations } = useInstitution();
+  const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   
   // Estado para imagen seleccionada
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -87,11 +88,16 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   // Estado para modal de solicitar asociación
   const [showRequestAssociationModal, setShowRequestAssociationModal] = useState(false);
   const [requestEmail, setRequestEmail] = useState('');
+  const [requestNombre, setRequestNombre] = useState('');
+  const [requestApellido, setRequestApellido] = useState('');
 
   // Estado para asociaciones reales
   const [asociaciones, setAsociaciones] = useState<Shared[]>([]);
   const [loadingAsociaciones, setLoadingAsociaciones] = useState(false);
   const [asociacionActiva, setAsociacionActiva] = useState<string | null>(null);
+
+  // Estado para pantalla de cambio de contraseña
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Usar la primera institución si no hay ninguna seleccionada
   const effectiveInstitution = selectedInstitution || (userAssociations.length > 0 ? userAssociations[0] : null);
@@ -126,11 +132,11 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
       // Simular llamada a API
       setTimeout(() => {
         hideLoading();
-        Alert.alert('Éxito', 'Asociación agregada correctamente');
+        console.log('✅ Asociación agregada correctamente');
       }, 1500);
     } catch (error) {
       hideLoading();
-      Alert.alert('Error', 'No se pudo agregar la asociación');
+      console.error('❌ No se pudo agregar la asociación');
     }
   };
 
@@ -165,7 +171,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
 
   const handleSavePersonaAutorizada = async () => {
     if (!newPersonaData.nombre.trim() || !newPersonaData.apellido.trim() || !newPersonaData.dni.trim()) {
-      Alert.alert('Error', 'Todos los campos son obligatorios');
+      console.error('❌ Todos los campos son obligatorios');
       return;
     }
 
@@ -181,7 +187,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
       
       if (!userAssociation) {
         console.log('🔍 [PerfilScreen] No se encontró asociación con institución');
-        Alert.alert('Error', 'No tienes instituciones asociadas');
+        console.error('❌ No tienes instituciones asociadas');
         return;
       }
 
@@ -196,18 +202,18 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
       
       setPersonasAutorizadas(prev => [...prev, newPickup]);
       handleCloseAddPersonaModal();
-      Alert.alert('Éxito', 'Persona autorizada agregada correctamente');
+      console.log('✅ Persona autorizada agregada correctamente');
     } catch (error: any) {
       console.error('Error al crear pickup:', error);
       
       // Manejar errores de validación del servidor
       if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
         const errorMessages = error.response.data.errors.join('\n');
-        Alert.alert('Error de validación', errorMessages);
+        console.log('Error de validación', errorMessages);
       } else if (error.response?.data?.message) {
-        Alert.alert('Error', error.response.data.message);
+        console.log('Error', error.response.data.message);
       } else {
-        Alert.alert('Error', error.message || 'Error al agregar persona autorizada');
+        console.log('Error', error.message || 'Error al agregar persona autorizada');
       }
     } finally {
       hideLoading();
@@ -215,20 +221,34 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   };
 
   // Seleccionar asociación activa
-  const handleSelectAsociacion = (id: string) => {
-    setAsociacionActiva(id);
-    Alert.alert('Éxito', 'Asociación activada correctamente');
+  const handleSelectAsociacion = async (id: string) => {
+    try {
+      // Llamar al servicio para actualizar la asociación activa en el servidor
+      const success = await ActiveAssociationService.setActiveAssociation(id);
+      
+      if (success) {
+        setAsociacionActiva(id);
+        // Refrescar la asociación activa en el contexto
+        await refreshActiveAssociation();
+        // No mostrar alert de éxito
+      } else {
+        console.log('Error', 'No se pudo cambiar la asociación activa');
+      }
+    } catch (error) {
+      console.error('Error al cambiar asociación activa:', error);
+      console.log('Error', 'No se pudo cambiar la asociación activa');
+    }
   };
 
   // Eliminar asociación
   const handleRemoveAsociacion = async (id: string) => {
     // Verificar si es la asociación activa
     if (id === asociacionActiva) {
-      Alert.alert('Error', 'No puedes eliminar la asociación activa');
+      console.log('Error', 'No puedes eliminar la asociación activa');
       return;
     }
 
-    Alert.alert(
+    console.log(
       'Eliminar asociación',
       '¿Estás seguro de que quieres eliminar esta asociación?',
       [
@@ -240,9 +260,9 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
             try {
               await SharedService.deleteAssociation(id);
               setAsociaciones(prev => prev.filter(a => a._id !== id));
-              Alert.alert('Éxito', 'Asociación eliminada correctamente');
+              console.log('Éxito', 'Asociación eliminada correctamente');
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Error al eliminar asociación');
+              console.log('Error', error.message || 'Error al eliminar asociación');
             }
           }
         }
@@ -250,42 +270,71 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
     );
   };
 
-  // Solicitar asociación por email
+  // Agregar familiar al estudiante
   const handleRequestAssociation = async () => {
-    if (!requestEmail.trim()) {
-      Alert.alert('Error', 'Por favor ingresa un email');
+    if (!requestEmail.trim() || !requestNombre.trim() || !requestApellido.trim()) {
+      console.error('❌ Todos los campos son obligatorios');
       return;
     }
 
     try {
-      showLoading('Solicitando asociación...');
-      const response = await SharedService.requestAssociation(requestEmail.trim());
+      showLoading('Agregando familiar...');
+      
+      // Obtener el estudiante del familyadmin activo
+      const activeStudent = activeAssociation?.student;
+      if (!activeStudent) {
+        console.error('❌ No se encontró estudiante asociado');
+        return;
+      }
+
+      const requestData = {
+        email: requestEmail.trim(),
+        nombre: requestNombre.trim(),
+        apellido: requestApellido.trim(),
+        studentId: activeStudent._id
+      };
+
+      const response = await SharedService.requestAssociation(requestData);
       
       setShowRequestAssociationModal(false);
       setRequestEmail('');
+      setRequestNombre('');
+      setRequestApellido('');
       
       if (response.success) {
-        Alert.alert('Éxito', response.message);
-        // Recargar asociaciones si se creó una nueva
-        if (response.data?.user) {
-          loadAsociaciones();
-        }
+        console.log('✅ Familiar agregado exitosamente:', response.message);
+        toastService.success('Éxito', response.message || 'Familiar agregado exitosamente');
+        // Recargar asociaciones
+        loadAsociaciones();
       }
     } catch (error: any) {
-      console.error('Error al solicitar asociación:', error);
+      console.error('❌ Error al agregar familiar:', error);
       
       if (error.response?.data?.message) {
-        Alert.alert('Error', error.response.data.message);
+        console.error('❌ Error del servidor:', error.response.data.message);
+        toastService.error('Error', error.response.data.message);
       } else {
-        Alert.alert('Error', error.message || 'Error al solicitar asociación');
+        console.error('❌ Error general:', error.message || 'Error al agregar familiar');
+        toastService.error('Error', error.message || 'Error al agregar familiar');
       }
     } finally {
       hideLoading();
     }
   };
 
+  const handlePasswordChanged = () => {
+    console.log('🔑 Contraseña cambiada exitosamente desde el perfil');
+    setShowChangePassword(false);
+  };
+
+  const handleLogoutAfterPasswordChange = async () => {
+    console.log('🔑 Deslogueando usuario después de cambiar contraseña');
+    setShowChangePassword(false);
+    await logout();
+  };
+
   const handleRemovePersonaAutorizada = async (id: string) => {
-    Alert.alert(
+    console.log(
       'Eliminar persona autorizada',
       '¿Estás seguro de que quieres eliminar esta persona?',
       [
@@ -297,9 +346,9 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
             try {
               await PickupService.delete(id);
               setPersonasAutorizadas(prev => prev.filter(p => p._id !== id));
-              Alert.alert('Éxito', 'Persona autorizada eliminada correctamente');
+              console.log('Éxito', 'Persona autorizada eliminada correctamente');
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Error al eliminar persona autorizada');
+              console.log('Error', error.message || 'Error al eliminar persona autorizada');
             }
           }
         }
@@ -311,21 +360,18 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   const loadAsociaciones = async () => {
     try {
       setLoadingAsociaciones(true);
-      const associations = await SharedService.getUserAssociations();
-      console.log('🔍 [PerfilScreen] Asociaciones recibidas:', associations);
-      associations.forEach((assoc, index) => {
-        console.log(`🔍 [PerfilScreen] Asociación ${index + 1}:`, {
-          id: assoc._id,
-          studentId: assoc.student?._id,
-          studentName: assoc.student?.nombre,
-          studentAvatar: assoc.student?.avatar
-        });
-      });
+      const associations = await ActiveAssociationService.getAvailableAssociations();
       setAsociaciones(associations);
       
-      // Establecer la primera asociación como activa por defecto
-      if (associations.length > 0 && !asociacionActiva) {
-        setAsociacionActiva(associations[0]._id);
+      
+      // Usar la asociación activa desde el contexto
+      if (activeAssociation) {
+        setAsociacionActiva(activeAssociation.activeShared);
+      } else {
+        // Establecer la primera asociación como activa por defecto si no hay activa
+        if (associations.length > 0 && !asociacionActiva) {
+          setAsociacionActiva(associations[0]._id);
+        }
       }
     } catch (error) {
       console.error('Error al cargar asociaciones:', error);
@@ -360,16 +406,11 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
 
   // Cargar datos del usuario
   const loadUserData = async () => {
-    console.log('🔍 [PerfilScreen] loadUserData iniciado');
-    console.log('🔍 [PerfilScreen] authUser completo:', JSON.stringify(authUser, null, 2));
-    
     if (!authUser) {
-      console.log('🔍 [PerfilScreen] No hay usuario autenticado');
       return;
     }
     
     try {
-      console.log('🔍 [PerfilScreen] Usando datos del contexto de autenticación');
       
       // Usar los datos del usuario autenticado
       setUser(authUser);
@@ -433,13 +474,13 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         console.log('✅ [PerfilScreen] Perfil actualizado exitosamente');
         setUser(result.data);
         setIsEditing(false);
-        Alert.alert('Éxito', 'Perfil actualizado correctamente');
+        console.log('Éxito', 'Perfil actualizado correctamente');
       } else {
         throw new Error(result.message || 'Error al actualizar el perfil');
       }
     } catch (error: any) {
       console.error('❌ [PerfilScreen] Error al actualizar perfil:', error);
-      Alert.alert('Error', error.message || 'Error al actualizar el perfil');
+      console.log('Error', error.message || 'Error al actualizar el perfil');
     } finally {
       hideLoading();
     }
@@ -459,11 +500,11 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         setUser(response.data.user);
         setSelectedImage(null);
       } else {
-        Alert.alert('Error', response.message || 'Error al actualizar el avatar');
+        console.log('Error', response.message || 'Error al actualizar el avatar');
       }
     } catch (error: any) {
       console.error('Error al subir avatar:', error);
-      Alert.alert('Error', 'Error al actualizar el avatar');
+      console.log('Error', 'Error al actualizar el avatar');
     } finally {
       hideLoading();
     }
@@ -471,7 +512,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
 
   // Manejar selección de imagen
   const handleImageSelection = () => {
-    Alert.alert(
+    console.log(
       'Seleccionar Imagen',
       '¿De dónde quieres seleccionar la imagen?',
       [
@@ -504,7 +545,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         console.log('Usuario canceló la cámara');
       } else if (response.error) {
         console.log('Error de cámara:', response.error);
-        Alert.alert('Error', 'No se pudo abrir la cámara');
+        console.log('Error', 'No se pudo abrir la cámara');
       } else if (response.assets && response.assets[0]) {
         const image = response.assets[0];
         if (image.uri) {
@@ -527,7 +568,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         console.log('Usuario canceló la galería');
       } else if (response.error) {
         console.log('Error de galería:', response.error);
-        Alert.alert('Error', 'No se pudo abrir la galería');
+        console.log('Error', 'No se pudo abrir la galería');
       } else if (response.assets && response.assets[0]) {
         const image = response.assets[0];
         if (image.uri) {
@@ -539,6 +580,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
 
   // Función para editar avatar del estudiante
   const handleEditStudentAvatar = (student: any) => {
+    console.log('🔍 [PerfilScreen] handleEditStudentAvatar llamado para:', student.nombre);
     Alert.alert(
       'Editar Avatar del Estudiante',
       `¿De dónde quieres seleccionar la imagen para ${student.nombre}?`,
@@ -572,7 +614,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         console.log('Usuario canceló la cámara');
       } else if (response.error) {
         console.log('Error de cámara:', response.error);
-        Alert.alert('Error', 'No se pudo abrir la cámara');
+        console.log('Error', 'No se pudo abrir la cámara');
       } else if (response.assets && response.assets[0]) {
         const image = response.assets[0];
         if (image.uri) {
@@ -595,7 +637,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         console.log('Usuario canceló la galería');
       } else if (response.error) {
         console.log('Error de galería:', response.error);
-        Alert.alert('Error', 'No se pudo abrir la galería');
+        console.log('Error', 'No se pudo abrir la galería');
       } else if (response.assets && response.assets[0]) {
         const image = response.assets[0];
         if (image.uri) {
@@ -633,27 +675,34 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
       const result = await response.json();
       
       if (result.success) {
-        // Actualizar la asociación con el nuevo avatar del estudiante
-        setAsociaciones(prev => prev.map(assoc => {
-          if (assoc.student && assoc.student._id === student._id) {
-            return {
-              ...assoc,
-              student: {
-                ...assoc.student,
-                avatar: result.data.student.avatar
-              }
-            };
-          }
-          return assoc;
-        }));
+        console.log('✅ [PerfilScreen] Avatar del estudiante actualizado exitosamente');
+        console.log('🔍 [PerfilScreen] Nuevo avatar URL:', result.data.student.avatar);
         
-        // Avatar actualizado exitosamente - sin alert
+        // Actualizar la asociación con el nuevo avatar del estudiante
+        setAsociaciones(prev => {
+          const updated = prev.map(assoc => {
+            if (assoc.student && assoc.student._id === student._id) {
+              return {
+                ...assoc,
+                student: {
+                  ...assoc.student,
+                  avatar: result.data.student.avatar
+                }
+              };
+            }
+            return assoc;
+          });
+          return updated;
+        });
+        
+        // Recargar las asociaciones para asegurar que se muestre el nuevo avatar
+        loadAsociaciones();
       } else {
-        Alert.alert('Error', result.message || 'Error al actualizar el avatar del estudiante');
+        console.error('❌ [PerfilScreen] Error del servidor:', result.message || 'Error al actualizar el avatar del estudiante');
       }
     } catch (error: any) {
       console.error('Error al subir avatar del estudiante:', error);
-      Alert.alert('Error', 'Error al actualizar el avatar del estudiante');
+      console.log('Error', 'Error al actualizar el avatar del estudiante');
     } finally {
       hideLoading();
     }
@@ -661,44 +710,17 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
 
   // Efecto para cargar datos del usuario
   useEffect(() => {
-    console.log('🔍 [PerfilScreen] useEffect - authUser cambió:', authUser);
-    console.log('🔍 [PerfilScreen] authUser._id:', authUser?._id);
     loadUserData();
     loadAsociaciones();
     loadPersonasAutorizadas();
   }, [authUser?._id]);
 
-  // Efecto para debuggear el token
-  useEffect(() => {
-    const debugToken = async () => {
-      try {
-        const token = await AsyncStorage.getItem('auth_token');
-        console.log('🔍 [PerfilScreen] Token guardado:', token ? 'SÍ' : 'NO');
-        if (token) {
-          console.log('🔍 [PerfilScreen] Token (primeros 20 chars):', token.substring(0, 20) + '...');
-        } else {
-          console.log('🔍 [PerfilScreen] No hay token, el usuario no está autenticado');
-        }
-      } catch (error) {
-        console.error('🔍 [PerfilScreen] Error al obtener token:', error);
-      }
-    };
-    debugToken();
-  }, []);
 
-  // Efecto para debuggear los datos del usuario
-  useEffect(() => {
-    console.log('🔍 [PerfilScreen] Estado actual - name:', name, 'email:', email, 'telefono:', telefono);
-    console.log('🔍 [PerfilScreen] Estado del usuario:', user);
-  }, [name, email, telefono, user]);
 
   // Efecto para subir imagen cuando se selecciona
   useEffect(() => {
-    console.log('🖼️ [PerfilScreen] selectedImage cambió:', selectedImage);
-    console.log('🖼️ [PerfilScreen] user._id:', user?._id);
     
     if (selectedImage && user?._id) {
-      console.log('🖼️ [PerfilScreen] Iniciando subida de avatar...');
       handleUploadAvatar();
     }
   }, [selectedImage]);
@@ -707,14 +729,12 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
 
 
 
-  // Log para debuggear la renderización
-  console.log('🔍 [PerfilScreen] Renderizando - name:', name, 'email:', email);
 
   return (
     <View style={styles.perfilContainer}>
               <CommonHeader 
           onOpenNotifications={onOpenNotifications} 
-          activeStudent={asociacionActiva ? asociaciones.find(a => a._id === asociacionActiva)?.student : null}
+          activeStudent={getActiveStudent()}
         />
       
       <KeyboardAvoidingView
@@ -787,7 +807,11 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                   )}
                   {isEditing && (
                     <View style={styles.perfilAvatarEditOverlay}>
-                      <Text style={styles.perfilAvatarEditIcon}>📷</Text>
+                      <Image
+                        source={require('../assets/design/icons/camera.png')}
+                        style={styles.perfilAvatarEditIcon}
+                        resizeMode="contain"
+                      />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -890,6 +914,23 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                     <Text style={styles.perfilInfoLabel}>Teléfono:</Text>
                     <Text style={styles.perfilInfoValue}>{telefono}</Text>
                   </View>
+                  
+                  {/* Botón de cambiar contraseña */}
+                  <View style={styles.changePasswordContainer}>
+                    <TouchableOpacity
+                      style={styles.changePasswordButton}
+                      onPress={() => setShowChangePassword(true)}
+                    >
+                      <Text style={styles.changePasswordButtonText}>Cambiar Contraseña</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Botón de Cerrar Sesión */}
+                  <View style={styles.logoutContainer}>
+                    <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+                      <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
             </View>
@@ -923,14 +964,16 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                 <FlatList
                   data={asociaciones}
                   keyExtractor={(item) => item._id}
-                  renderItem={({ item }) => (
+                  renderItem={({ item }) => {
+                    const isActive = item.isActive;
+                    return (
                     <TouchableOpacity
                       style={[
                         styles.asociacionItem,
-                        asociacionActiva === item._id && styles.asociacionItemActiva
+                        isActive && styles.asociacionItemActiva
                       ]}
                       onPress={() => handleSelectAsociacion(item._id)}
-                      disabled={asociacionActiva === item._id}
+                      disabled={isActive}
                     >
                       <View style={styles.asociacionInfo}>
                         <View style={styles.asociacionHeader}>
@@ -952,6 +995,11 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                                   source={{ uri: item.student.avatar }} 
                                   style={styles.studentAvatar}
                                   resizeMode="cover"
+                                  onLoad={() => console.log('✅ [PerfilScreen] Avatar del estudiante cargado:', item.student.nombre, item.student.avatar)}
+                                  onError={(error) => {
+                                    console.error('❌ [PerfilScreen] Error cargando avatar del estudiante:', item.student.nombre, error.nativeEvent);
+                                    console.error('❌ [PerfilScreen] URL del avatar:', item.student.avatar);
+                                  }}
                                 />
                               ) : (
                                 <Text style={styles.studentAvatarPlaceholder}>👤</Text>
@@ -961,7 +1009,11 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                                   style={styles.editStudentAvatarButton}
                                   onPress={() => handleEditStudentAvatar(item.student)}
                                 >
-                                  <Text style={styles.editStudentAvatarIcon}>📷</Text>
+                                  <Image
+                                    source={require('../assets/design/icons/camera.png')}
+                                    style={styles.editStudentAvatarIcon}
+                                    resizeMode="contain"
+                                  />
                                 </TouchableOpacity>
                               )}
                             </View>
@@ -981,16 +1033,9 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                           </Text>
                         </View>
                       </View>
-                      {isFamilyAdmin && asociacionActiva !== item._id && (
-                        <TouchableOpacity
-                          style={styles.removeAsociacionButton}
-                          onPress={() => handleRemoveAsociacion(item._id)}
-                        >
-                          <Text style={styles.removeAsociacionButtonText}>✕</Text>
-                        </TouchableOpacity>
-                      )}
                     </TouchableOpacity>
-                  )}
+                    );
+                  }}
                   scrollEnabled={false}
                 />
               )}
@@ -1031,12 +1076,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
             </View>
           )}
 
-          {/* Botón de Cerrar Sesión */}
-          <View style={styles.logoutContainer}>
-            <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-              <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
-            </TouchableOpacity>
-          </View>
+
         </ScrollView>
         
         {/* Modal para Avatar */}
@@ -1091,7 +1131,14 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
         >
           <View style={styles.menuModalOverlay}>
             <View style={styles.menuModalContainer}>
-              <SideMenu navigation={{}} onClose={closeMenu} />
+              <SideMenu 
+                navigation={{}} 
+                onClose={closeMenu}
+                onOpenActiveAssociation={() => {
+                  closeMenu();
+                  onOpenActiveAssociation?.();
+                }}
+              />
             </View>
           </View>
         </Modal>
@@ -1106,7 +1153,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
           <View style={styles.modalOverlay}>
             <View style={styles.addPersonaModalContainer}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Solicitar Asociación</Text>
+                <Text style={styles.modalTitle}>Agregar Familiar</Text>
                 <TouchableOpacity
                   style={styles.modalCloseButton}
                   onPress={() => setShowRequestAssociationModal(false)}
@@ -1117,12 +1164,34 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
               
               <View style={styles.modalContent}>
                 <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Nombre *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={requestNombre}
+                    onChangeText={setRequestNombre}
+                    placeholder="Ingresa el nombre"
+                    autoCapitalize="words"
+                  />
+                </View>
+                
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Apellido *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={requestApellido}
+                    onChangeText={setRequestApellido}
+                    placeholder="Ingresa el apellido"
+                    autoCapitalize="words"
+                  />
+                </View>
+                
+                <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Email *</Text>
                   <TextInput
                     style={styles.textInput}
                     value={requestEmail}
                     onChangeText={setRequestEmail}
-                    placeholder="Ingresa el email del usuario"
+                    placeholder="Ingresa el email"
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -1131,7 +1200,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                 
                 <Text style={styles.modalDescription}>
                   Si el usuario ya existe, se creará la asociación inmediatamente. 
-                  Si no existe, se guardará la solicitud y se creará cuando se registre.
+                  Si no existe, se creará un nuevo usuario y se enviará una invitación por email.
                 </Text>
               </View>
               
@@ -1146,7 +1215,7 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                   style={styles.saveButton}
                   onPress={handleRequestAssociation}
                 >
-                  <Text style={styles.saveButtonText}>Solicitar</Text>
+                  <Text style={styles.saveButtonText}>Agregar</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1225,6 +1294,19 @@ const PerfilScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
             </View>
           </View>
         </Modal>
+
+        {/* Pantalla de cambio de contraseña - Full Screen */}
+        {showChangePassword && (
+          <View style={styles.fullScreenOverlay}>
+            <ChangePasswordScreen 
+              isFirstLogin={false}
+              onPasswordChanged={handlePasswordChanged}
+              onBack={() => setShowChangePassword(false)}
+              onLogout={handleLogoutAfterPasswordChange}
+            />
+          </View>
+        )}
+
       </View>
     );
   };
@@ -1310,7 +1392,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   perfilAvatarEditIcon: {
-    fontSize: 16,
+    width: 20,
+    height: 20,
+    tintColor: '#FFFFFF',
   },
   avatarHintText: {
     fontSize: 12,
@@ -1817,20 +1901,20 @@ const styles = StyleSheet.create({
   },
   // Estilos para el botón de cerrar sesión
   logoutContainer: {
-    alignItems: 'center',
-    marginTop: 40,
+    marginTop: 15,
     marginBottom: 20,
   },
   logoutButton: {
-    backgroundColor: '#FF4444',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: '#DC3545',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   logoutButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   // Estilos para asociaciones
   asociacionesHeader: {
@@ -1947,16 +2031,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -8,
     bottom: -8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#0E5FCE',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   editStudentAvatarIcon: {
-    fontSize: 12,
-    color: '#FFFFFF',
+    width: 16,
+    height: 16,
+    tintColor: '#FFFFFF',
   },
   studentTextInfo: {
     flex: 1,
@@ -2003,6 +2096,31 @@ const styles = StyleSheet.create({
     color: '#FF4444',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  changePasswordContainer: {
+    marginTop: 20,
+  },
+  changePasswordButton: {
+    backgroundColor: '#0E5FCE',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  changePasswordButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  fullScreenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0E5FCE',
+    zIndex: 9999,
+    elevation: 9999,
   },
 });
 

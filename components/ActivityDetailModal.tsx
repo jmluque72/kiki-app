@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  Alert
+  Alert,
+  FlatList
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 import { ActivityService } from '../src/services/activityService';
+import favoriteService from '../src/services/favoriteService';
+import { useInstitution } from '../contexts/InstitutionContext';
+import ImageFullScreen from './ImageFullScreen';
 
 interface Activity {
   _id: string;
@@ -57,10 +61,81 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
   onClose,
   onEdit
 }) => {
+  const { getActiveStudent } = useInstitution();
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [loadingFavorite, setLoadingFavorite] = useState(false);
+  const [showFullScreen, setShowFullScreen] = useState(false);
+
   // Si no está visible o no hay actividad, no renderizar nada
   if (!visible || !activity) return null;
 
   const canEdit = userRole === 'coordinador';
+  const isFamilyUser = userRole === 'familyadmin' || userRole === 'familyviewer';
+  const activeStudent = getActiveStudent();
+
+
+  // Verificar si la actividad es favorita cuando se abre el modal
+  useEffect(() => {
+    if (visible && activity && isFamilyUser && activeStudent) {
+      checkFavoriteStatus();
+    }
+  }, [visible, activity, isFamilyUser, activeStudent]);
+
+  const checkFavoriteStatus = async () => {
+    try {
+      const favoriteStatus = await favoriteService.checkFavorite(activity._id, activeStudent._id);
+      setIsFavorite(favoriteStatus);
+    } catch (error) {
+      console.error('Error checking favorite status:', error);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!activeStudent || loadingFavorite) return;
+
+    setLoadingFavorite(true);
+    try {
+      const newFavoriteStatus = !isFavorite;
+      await favoriteService.toggleFavorite(activity._id, activeStudent._id, newFavoriteStatus);
+      setIsFavorite(newFavoriteStatus);
+      
+      Alert.alert(
+        'Éxito',
+        newFavoriteStatus ? 'Agregado a favoritos' : 'Eliminado de favoritos'
+      );
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Error', 'No se pudo actualizar el favorito');
+    } finally {
+      setLoadingFavorite(false);
+    }
+  };
+
+  const handleImagePress = () => {
+    if (isFamilyUser && activity.imagenes && activity.imagenes.length > 0) {
+      setShowFullScreen(true);
+    }
+  };
+
+  // Para usuarios familiares, abrir directamente la pantalla fullscreen
+  const handleActivityPress = () => {
+    if (isFamilyUser && activity.imagenes && activity.imagenes.length > 0) {
+      setShowFullScreen(true);
+    }
+  };
+
+  const handleFullScreenClose = () => {
+    setShowFullScreen(false);
+  };
+
+  const handleImageIndexChange = (index: number) => {
+    setCurrentImageIndex(index);
+  };
+
+  const handleFavoriteToggle = (newFavoriteStatus: boolean) => {
+    setIsFavorite(newFavoriteStatus);
+  };
   
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -163,6 +238,30 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
     return null;
   }
   
+  // Para usuarios familiares, mostrar directamente la pantalla fullscreen
+  if (isFamilyUser && activity.imagenes && activity.imagenes.length > 0) {
+    return (
+      <>
+        {/* Pantalla de imagen completa para usuarios familiares */}
+        {activeStudent && (
+          <ImageFullScreen
+            visible={visible}
+            images={activity.imagenes || []}
+            currentIndex={currentImageIndex}
+            onClose={onClose}
+            onIndexChange={handleImageIndexChange}
+            activityId={activity._id}
+            studentId={activeStudent._id}
+            isFavorite={isFavorite}
+            onFavoriteToggle={handleFavoriteToggle}
+            activityTitle={activity.titulo}
+            activityDescription={activity.descripcion}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <Modal
       visible={true}
@@ -181,26 +280,105 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modalContent}>
-            {/* Imagen principal */}
-            {activity.imagenes && activity.imagenes.length > 0 ? (
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{ uri: activity.imagenes[0] }}
-                  style={styles.mainImage}
-                  resizeMode="cover"
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
+            {/* Carrusel de imágenes para usuarios familiares */}
+            {isFamilyUser && activity.imagenes && activity.imagenes.length > 0 ? (
+              <View style={styles.carouselContainer}>
+                <FlatList
+                  data={activity.imagenes}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onMomentumScrollEnd={(event) => {
+                    const index = Math.round(event.nativeEvent.contentOffset.x / width);
+                    setCurrentImageIndex(index);
+                  }}
+                  renderItem={({ item, index }) => (
+                    <TouchableOpacity 
+                      style={styles.carouselImageContainer}
+                      onPress={handleImagePress}
+                      activeOpacity={0.9}
+                    >
+                      <Image
+                        source={{ uri: item }}
+                        style={styles.carouselImage}
+                        resizeMode="cover"
+                      />
+                      {/* Botón de favorito */}
+                      <TouchableOpacity
+                        style={styles.favoriteButton}
+                        onPress={handleToggleFavorite}
+                        disabled={loadingFavorite}
+                      >
+                        <Text style={[styles.favoriteIcon, isFavorite && styles.favoriteIconActive]}>
+                          {isFavorite ? '❤️' : '🤍'}
+                        </Text>
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  )}
+                  keyExtractor={(item, index) => index.toString()}
                 />
+                {/* Indicadores de página */}
                 {activity.imagenes.length > 1 && (
-                  <View style={styles.imageCountBadge}>
-                    <Text style={styles.imageCountText}>+{activity.imagenes.length - 1}</Text>
+                  <View style={styles.pageIndicators}>
+                    {activity.imagenes.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.pageIndicator,
+                          index === currentImageIndex && styles.pageIndicatorActive
+                        ]}
+                      />
+                    ))}
                   </View>
                 )}
               </View>
             ) : (
-              <View style={styles.noImageContainer}>
-                <Text style={styles.noImageEmoji}>{getActivityEmoji(activity.tipo)}</Text>
-                <Text style={styles.noImageText}>Sin imagen</Text>
-              </View>
+              /* Carrusel de imágenes para coordinadores */
+              activity.imagenes && activity.imagenes.length > 0 ? (
+                <View style={styles.imageContainer}>
+                  <FlatList
+                    data={activity.imagenes}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carouselContainer}
+                    onMomentumScrollEnd={(event) => {
+                      const index = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
+                      setCurrentImageIndex(index);
+                    }}
+                    renderItem={({ item }) => (
+                      <View style={styles.carouselImageContainer}>
+                        <Image
+                          source={{ uri: item }}
+                          style={styles.carouselImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                    )}
+                    keyExtractor={(item, index) => index.toString()}
+                  />
+                  {/* Indicadores de página */}
+                  {activity.imagenes.length > 1 && (
+                    <View style={styles.pageIndicators}>
+                      {activity.imagenes.map((_, index) => (
+                        <View
+                          key={index}
+                          style={[
+                            styles.pageIndicator,
+                            index === currentImageIndex && styles.pageIndicatorActive
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.noImageContainer}>
+                  <Text style={styles.noImageEmoji}>{getActivityEmoji(activity.tipo)}</Text>
+                  <Text style={styles.noImageText}>Sin imagen</Text>
+                </View>
+              )
             )}
 
             <Text style={styles.activityTitle}>{activity.titulo || activity.descripcion}</Text>
@@ -215,7 +393,7 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                 <Text style={styles.infoValue}>Participantes: {activity.participantes}</Text>
               )}
             </View>
-          </View>
+          </ScrollView>
 
           {/* Footer con acciones */}
           {canEdit && (
@@ -276,7 +454,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: '#FFFFFF',
-    minHeight: 300,
   },
   infoContainer: {
     backgroundColor: '#F8F9FA',
@@ -427,6 +604,62 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: fonts.bold,
+  },
+  // Estilos para el carrusel
+  carouselContainer: {
+    height: 250,
+    marginBottom: 20,
+  },
+  carouselImageContainer: {
+    width: width * 0.9,
+    height: 250,
+    position: 'relative',
+  },
+  carouselImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 15,
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  favoriteIcon: {
+    fontSize: 24,
+  },
+  favoriteIconActive: {
+    fontSize: 26,
+  },
+  pageIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  pageIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#CCCCCC',
+    marginHorizontal: 4,
+  },
+  pageIndicatorActive: {
+    backgroundColor: '#FF8C42',
+    width: 12,
+    height: 8,
+    borderRadius: 4,
   },
 });
 

@@ -9,7 +9,8 @@ import {
   TextInput,
   Modal,
   Alert,
-  Platform
+  Platform,
+  Switch
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -17,6 +18,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useEvents } from '../src/hooks/useEvents';
 import CommonHeader from '../components/CommonHeader';
 import WeeklyCalendar from '../components/WeeklyCalendar';
+import EventAuthorizationButton from '../components/EventAuthorizationButton';
+import EventAuthorizationModal from '../components/EventAuthorizationModal';
 
 const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
@@ -35,10 +38,15 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
   const [eventoTitulo, setEventoTitulo] = useState('');
   const [eventoDescripcion, setEventoDescripcion] = useState('');
   const [eventoLugar, setEventoLugar] = useState('');
+  const [requiereAutorizacion, setRequiereAutorizacion] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(new Date());
+  
+  // Estados para modal de autorizaciones
+  const [showAuthorizationModal, setShowAuthorizationModal] = useState(false);
+  const [selectedEventForAuth, setSelectedEventForAuth] = useState<{id: string, title: string} | null>(null);
   
   const toLocalISO = (d: Date) => {
     const tzAdjusted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
@@ -83,14 +91,12 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
     return 'La Salle';
   };
 
-  // Verificar si el usuario es coordinador
-  const isCoordinador = user?.role?.nombre === 'coordinador';
-
-  // Debug temporal para verificar el rol
-  console.log('EventosScreen - Usuario:', user?.nombre);
-  console.log('EventosScreen - Rol completo:', user?.role);
-  console.log('EventosScreen - Rol nombre:', user?.role?.nombre);
-  console.log('EventosScreen - Es coordinador:', isCoordinador);
+  // Verificar si el usuario es coordinador usando la asociación activa
+  const { activeAssociation } = useAuth();
+  const isCoordinador = activeAssociation?.role?.nombre === 'coordinador';
+  
+  // Verificar si el usuario es de familia (familyadmin o familyviewer) usando la asociación activa
+  const isFamilyUser = activeAssociation?.role?.nombre === 'familyadmin' || activeAssociation?.role?.nombre === 'familyviewer';
 
   // Funciones para manejar selectores de fecha y hora
   const showDateSelector = () => {
@@ -107,6 +113,7 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
     setEventoTitulo('');
     setEventoDescripcion('');
     setEventoLugar('');
+    setRequiereAutorizacion(false);
     setSelectedDate(new Date());
     setSelectedTime(new Date());
     setSelectedDateValue(new Date().toISOString().split('T')[0]);
@@ -142,6 +149,16 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
     return options;
   };
 
+  const handleShowAuthorizationDetails = (eventId: string, eventTitle: string) => {
+    setSelectedEventForAuth({ id: eventId, title: eventTitle });
+    setShowAuthorizationModal(true);
+  };
+
+  const handleCloseAuthorizationModal = () => {
+    setShowAuthorizationModal(false);
+    setSelectedEventForAuth(null);
+  };
+
   const handleCreateEvent = async () => {
     if (!eventoFecha || !eventoHora || !eventoTitulo || !eventoDescripcion) {
       Alert.alert('Error', 'Por favor completa todos los campos');
@@ -158,7 +175,8 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
         descripcion: eventoDescripcion,
         fecha: fecha,
         hora: hora,
-        lugar: eventoLugar
+        lugar: eventoLugar,
+        requiereAutorizacion: requiereAutorizacion
       });
 
       if (success) {
@@ -187,31 +205,33 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
             <Text style={styles.eventosTitleText}>EVENTOS</Text>
           </View>
 
-          {/* Pestañas */}
-          <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tab, selectedTab === 'visualizar' && styles.tabActive]}
-              onPress={() => setSelectedTab('visualizar')}
-            >
-              <Text style={[styles.tabText, selectedTab === 'visualizar' && styles.tabTextActive]}>
-                Eventos
-              </Text>
-            </TouchableOpacity>
-            
-            {isCoordinador && (
+          {/* Pestañas - Solo para coordinadores */}
+          {!isFamilyUser && (
+            <View style={styles.tabsContainer}>
               <TouchableOpacity
-                style={[styles.tab, selectedTab === 'crear' && styles.tabActive]}
-                onPress={() => setSelectedTab('crear')}
+                style={[styles.tab, selectedTab === 'visualizar' && styles.tabActive]}
+                onPress={() => setSelectedTab('visualizar')}
               >
-                <Text style={[styles.tabText, selectedTab === 'crear' && styles.tabTextActive]}>
-                  Crear
+                <Text style={[styles.tabText, selectedTab === 'visualizar' && styles.tabTextActive]}>
+                  Eventos
                 </Text>
               </TouchableOpacity>
-            )}
-          </View>
+              
+              {isCoordinador && (
+                <TouchableOpacity
+                  style={[styles.tab, selectedTab === 'crear' && styles.tabActive]}
+                  onPress={() => setSelectedTab('crear')}
+                >
+                  <Text style={[styles.tabText, selectedTab === 'crear' && styles.tabTextActive]}>
+                    Crear
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           {/* Contenido de las pestañas */}
-          {selectedTab === 'visualizar' && (
+          {(selectedTab === 'visualizar' || isFamilyUser) && (
             <View>
               {/* Calendario semanal */}
               <WeeklyCalendar
@@ -241,39 +261,10 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
                       }
                     </Text>
                     {(eventsByDate[selectedCalendarDate ? formatDate(selectedCalendarDate) : formatDate(new Date())] || []).length === 0 ? (
-                      // Si no hay eventos para el día seleccionado, mostrar próximos eventos
-                      upcomingEvents.length > 0 ? (
-                        <View>
-                          <Text style={styles.upcomingEventsTitle}>Próximos eventos</Text>
-                          {upcomingEvents.slice(0, 5).map((event) => (
-                            <View key={event._id} style={styles.eventoCard}>
-                              <View style={styles.eventoContent}>
-                                <View style={styles.eventoTimeDisplay}>
-                                  <Text style={styles.eventoTimeDisplayText}>
-                                    {new Date(event.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - {event.hora}
-                                  </Text>
-                                </View>
-                                <Text style={styles.eventoTitulo}>{event.titulo}</Text>
-                                <Text style={styles.eventoDescripcion}>{event.descripcion}</Text>
-
-                                {event.lugar && (
-                                  <View style={styles.eventoLocationContainer}>
-                                    <Text style={styles.eventoLocationText}>{event.lugar}</Text>
-                                  </View>
-                                )}
-                                
-                                <View style={styles.eventoInstitutionContainer}>
-                                  <Text style={styles.eventoInstitutionText}>{getInstitutionName()}</Text>
-                                </View>
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-                      ) : (
-                        <View style={styles.emptyContainer}>
-                          <Text style={styles.emptyText}>No hay eventos programados</Text>
-                        </View>
-                      )
+                      // Si no hay eventos para el día seleccionado, mostrar mensaje de no hay eventos
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No hay eventos programados para este día</Text>
+                      </View>
                     ) : (
                       (eventsByDate[selectedCalendarDate ? formatDate(selectedCalendarDate) : formatDate(new Date())] || []).map((event) => (
                         <View key={event._id} style={styles.eventoCard}>
@@ -293,6 +284,26 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
                             <View style={styles.eventoInstitutionContainer}>
                               <Text style={styles.eventoInstitutionText}>{getInstitutionName()}</Text>
                             </View>
+                            
+                            {/* Botones de autorización */}
+                            <View style={styles.eventActionsContainer}>
+                              {/* Botón de autorización para familyadmin */}
+                              <EventAuthorizationButton
+                                eventId={event._id}
+                                eventTitle={event.titulo}
+                                requiereAutorizacion={event.requiereAutorizacion || false}
+                              />
+                              
+                              {/* Botón de detalles para coordinadores en eventos que requieren autorización */}
+                              {isCoordinador && event.requiereAutorizacion && (
+                                <TouchableOpacity
+                                  style={styles.detailsButton}
+                                  onPress={() => handleShowAuthorizationDetails(event._id, event.titulo)}
+                                >
+                                  <Text style={styles.detailsButtonText}>Detalles</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
                           </View>
                         </View>
                       ))
@@ -303,7 +314,7 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
             </View>
           )}
 
-          {selectedTab === 'crear' && (
+          {selectedTab === 'crear' && isCoordinador && (
             <View style={styles.crearContainer}>
               <Text style={styles.crearTitle}>Crear Nuevo Evento</Text>
 
@@ -362,6 +373,21 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
                     value={eventoLugar}
                     onChangeText={setEventoLugar}
                   />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <View style={styles.switchContainer}>
+                    <Text style={styles.inputLabel}>Requiere autorización de padres</Text>
+                    <Switch
+                      value={requiereAutorizacion}
+                      onValueChange={setRequiereAutorizacion}
+                      trackColor={{ false: '#E0E0E0', true: '#0E5FCE' }}
+                      thumbColor={requiereAutorizacion ? '#FFFFFF' : '#FFFFFF'}
+                    />
+                  </View>
+                  <Text style={styles.switchDescription}>
+                    Si está activado, los padres deberán autorizar la participación de sus hijos
+                  </Text>
                 </View>
 
                 <View style={styles.formButtons}>
@@ -468,6 +494,16 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
             </View>
           </View>
         </Modal>
+      )}
+
+      {/* Modal de autorizaciones */}
+      {selectedEventForAuth && (
+        <EventAuthorizationModal
+          visible={showAuthorizationModal}
+          eventId={selectedEventForAuth.id}
+          eventTitle={selectedEventForAuth.title}
+          onClose={handleCloseAuthorizationModal}
+        />
       )}
     </>
   );
@@ -741,6 +777,35 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#666666',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  switchDescription: {
+    fontSize: 12,
+    color: '#666666',
+    fontStyle: 'italic',
+  },
+  eventActionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 10,
+  },
+  detailsButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  detailsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
 

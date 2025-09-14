@@ -35,13 +35,13 @@ export interface UseActivitiesReturn {
   refetch: () => void;
 }
 
-export const useActivities = (accountId?: string, divisionId?: string): UseActivitiesReturn => {
+export const useActivities = (accountId?: string, divisionId?: string, selectedDate?: Date | null): UseActivitiesReturn => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchActivities = async () => {
-    console.log('useActivities - fetchActivities called with:', { accountId, divisionId });
+    console.log('useActivities - fetchActivities called with:', { accountId, divisionId, selectedDate });
     
     if (!accountId) {
       console.log('useActivities - No accountId provided, setting empty activities');
@@ -57,6 +57,9 @@ export const useActivities = (accountId?: string, divisionId?: string): UseActiv
       params.append('accountId', accountId);
       if (divisionId) {
         params.append('divisionId', divisionId);
+      }
+      if (selectedDate) {
+        params.append('selectedDate', selectedDate.toISOString());
       }
 
       const url = `/activities/mobile?${params.toString()}`;
@@ -97,7 +100,7 @@ export const useActivities = (accountId?: string, divisionId?: string): UseActiv
 
   useEffect(() => {
     fetchActivities();
-  }, [accountId, divisionId]);
+  }, [accountId, divisionId, selectedDate]);
 
   const refetch = () => {
     fetchActivities();

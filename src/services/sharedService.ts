@@ -24,6 +24,7 @@ export interface Shared {
   status: 'active' | 'inactive';
   createdAt: string;
   updatedAt: string;
+  isActive?: boolean;
 }
 
 export interface CreateSharedRequest {
@@ -76,16 +77,21 @@ class SharedService {
     }
   }
 
-  // Solicitar asociación por email (solo familyadmin)
-  static async requestAssociation(email: string): Promise<any> {
+  // Agregar familiar al estudiante (solo familyadmin)
+  static async requestAssociation(data: {
+    email: string;
+    nombre: string;
+    apellido: string;
+    studentId: string;
+  }): Promise<any> {
     try {
-      const response = await apiClient.post('/shared/request', { email });
+      const response = await apiClient.post('/shared/request', data);
       return response.data;
     } catch (error: any) {
       if (error.response?.data) {
         throw error;
       }
-      throw new Error('Error al solicitar asociación');
+      throw new Error('Error al agregar familiar');
     }
   }
 }

@@ -22,20 +22,23 @@ import CustomAlert from '../components/CustomAlert';
 const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   
+  // Usar la primera institución si no hay ninguna seleccionada (igual que InicioScreen)
+  const effectiveInstitution = selectedInstitution || (userAssociations.length > 0 ? userAssociations[0] : null);
+  
   // Debug logs para ver qué institución se está usando
-  console.log('🔍 [ActividadScreen] selectedInstitution:', selectedInstitution ? {
-    id: selectedInstitution._id,
-    account: selectedInstitution.account?.nombre,
-    student: selectedInstitution.student ? {
-      id: selectedInstitution.student._id,
-      name: selectedInstitution.student.nombre,
-      avatar: selectedInstitution.student.avatar
+  console.log('🔍 [ActividadScreen] effectiveInstitution:', effectiveInstitution ? {
+    id: effectiveInstitution._id,
+    account: effectiveInstitution.account?.nombre,
+    student: effectiveInstitution.student ? {
+      id: effectiveInstitution.student._id,
+      name: effectiveInstitution.student.nombre,
+      avatar: effectiveInstitution.student.avatar
     } : null
   } : null);
   const { user, token } = useAuth();
   const { students, loading: studentsLoading } = useStudents(
-    selectedInstitution?.account._id,
-    selectedInstitution?.division?._id
+    effectiveInstitution?.account._id,
+    effectiveInstitution?.division?._id
   );
   
   const [selectedImages, setSelectedImages] = useState([]);
@@ -118,7 +121,7 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
   };
 
   // Funciones para el autocompletar de participantes
-  console.log('🔍 Debug - selectedInstitution:', selectedInstitution);
+  console.log('🔍 Debug - effectiveInstitution:', effectiveInstitution);
   console.log('🔍 Debug - students:', students);
   console.log('🔍 Debug - studentsLoading:', studentsLoading);
   console.log('🔍 Debug - participantesSearch:', participantesSearch);
@@ -132,11 +135,25 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
   console.log('🔍 Debug - filteredStudents:', filteredStudents);
 
   const handleSelectParticipante = (studentId: string) => {
-    if (!selectedParticipantes.includes(studentId)) {
+    if (selectedParticipantes.includes(studentId)) {
+      // Si ya está seleccionado, lo deseleccionamos
+      setSelectedParticipantes(prev => prev.filter(id => id !== studentId));
+    } else {
+      // Si no está seleccionado, lo agregamos
       setSelectedParticipantes(prev => [...prev, studentId]);
     }
     setParticipantesSearch('');
     setShowParticipantesDropdown(false);
+  };
+
+  const toggleAllStudents = () => {
+    if (students.length > 0 && students.every(student => selectedParticipantes.includes(student._id))) {
+      // Si todos están seleccionados, deseleccionar todos
+      setSelectedParticipantes([]);
+    } else {
+      // Si no todos están seleccionados, seleccionar todos
+      setSelectedParticipantes(students.map(student => student._id));
+    }
   };
 
   const handleRemoveParticipante = (studentId: string) => {
@@ -237,22 +254,22 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
       return;
     }
 
-    if (!selectedInstitution?.account._id) {
+    if (!effectiveInstitution?.account._id) {
       console.log('No hay institución seleccionada');
       Alert.alert('Error', 'No hay institución seleccionada');
       return;
     }
 
     // Verificar que se tenga una división seleccionada si el usuario tiene división
-    if (selectedInstitution.division && !selectedInstitution.division._id) {
+    if (effectiveInstitution.division && !effectiveInstitution.division._id) {
       console.log('No hay división seleccionada');
       Alert.alert('Error', 'Debes seleccionar una división');
       return;
     }
 
     console.log('Usuario:', user._id);
-    console.log('Institución:', selectedInstitution.account._id);
-    console.log('División:', selectedInstitution.division?._id || 'Sin división');
+    console.log('Institución:', effectiveInstitution.account._id);
+    console.log('División:', effectiveInstitution.division?._id || 'Sin división');
     console.log('Datos del formulario:', formData);
 
     setIsSubmitting(true);
@@ -269,8 +286,8 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
         participantes: selectedParticipantes, // Array de IDs de estudiantes
         descripcion: formData.descripcion,
         imagenes: uploadedImages,
-        accountId: selectedInstitution.account._id,
-        divisionId: selectedInstitution.division?._id,
+        accountId: effectiveInstitution.account._id,
+        divisionId: effectiveInstitution.division?._id,
         userId: user._id
       };
 
@@ -321,8 +338,8 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
   };
 
   const getInstitutionName = () => {
-    if (selectedInstitution) {
-      return selectedInstitution.account.nombre;
+    if (effectiveInstitution) {
+      return effectiveInstitution.account.nombre;
     }
     if (userAssociations.length === 1) {
       return userAssociations[0].account.nombre;
@@ -331,8 +348,8 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
   };
 
   const getDivisionName = () => {
-    if (selectedInstitution?.division) {
-      return selectedInstitution.division.nombre;
+    if (effectiveInstitution?.division) {
+      return effectiveInstitution.division.nombre;
     }
     return 'Todas las divisiones';
   };
@@ -345,13 +362,10 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
         />
       
       <ScrollView style={styles.scrollContainer}>
-        {/* Título ACTIVIDAD centrado */}
-        <View style={styles.actividadTitleContainer}>
+        {/* Título ACTIVIDAD y Botón de cámara unificados */}
+        <View style={styles.unifiedHeaderContainer}>
           <Text style={styles.actividadTitle}>ACTIVIDAD</Text>
-        </View>
-
-        {/* Botón circular de cámara centrado */}
-        <View style={styles.mediaButtonsContainer}>
+          
           <TouchableOpacity style={styles.mediaButton} onPress={handleImagePicker}>
             <View style={styles.mediaButtonCircle}>
               <Image
@@ -404,50 +418,55 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
           <View style={styles.formFieldContainer}>
             <Text style={styles.formLabel}>Participantes <Text style={styles.requiredAsterisk}>*</Text> <Text style={styles.formSubtext}>(seleccionar los alumnos)</Text></Text>
             
-            {/* Cuadrícula de estudiantes */}
-            {studentsLoading ? (
-              <View style={styles.studentsLoadingContainer}>
-                <Text style={styles.studentsLoadingText}>Cargando alumnos...</Text>
+            {/* Selección de participantes */}
+            <View style={styles.studentsSection}>
+              <View style={styles.studentsHeader}>
+                <TouchableOpacity onPress={toggleAllStudents} style={styles.selectAllButton}>
+                  <Text style={styles.selectAllButtonText}>
+                    {students.length > 0 && students.every(student => selectedParticipantes.includes(student._id)) 
+                      ? 'Deseleccionar todos' 
+                      : 'Seleccionar todos'}
+                  </Text>
+                </TouchableOpacity>
               </View>
-            ) : students.length === 0 ? (
-              <View style={styles.studentsEmptyContainer}>
-                <Text style={styles.studentsEmptyText}>No hay alumnos disponibles en esta división</Text>
-              </View>
-            ) : (
-              <View style={styles.studentsGrid}>
-                {students.map((student) => (
-                  <TouchableOpacity
-                    key={student._id}
-                    style={[
-                      styles.studentItem,
-                      selectedParticipantes.includes(student._id) && styles.studentItemSelected
-                    ]}
-                    onPress={() => handleSelectParticipante(student._id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.studentAvatar}>
-                      {student.avatar ? (
-                        <Image 
-                          source={{ uri: student.avatar }} 
-                          style={styles.studentAvatarImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <Text style={styles.studentIcon}>👤</Text>
-                      )}
-                      {selectedParticipantes.includes(student._id) && (
-                        <View style={styles.checkMark}>
-                          <Text style={styles.checkText}>✓</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.studentNombre}>{student.nombre}</Text>
-                    <Text style={styles.studentApellido}>{student.apellido}</Text>
-                    <Text style={styles.studentDivision}>{student.division?.nombre}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+              
+              {studentsLoading ? (
+                <Text style={styles.loadingText}>Cargando alumnos...</Text>
+              ) : students.length === 0 ? (
+                <Text style={styles.noStudentsText}>No hay alumnos disponibles en esta división</Text>
+              ) : (
+                <View style={styles.studentsGrid}>
+                  {students.map((student) => (
+                    <TouchableOpacity
+                      key={student._id}
+                      style={styles.studentItem}
+                      onPress={() => handleSelectParticipante(student._id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.studentAvatar}>
+                        {student.avatar ? (
+                          <Image 
+                            source={{ uri: student.avatar }} 
+                            style={styles.studentAvatarImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.studentIcon}>👤</Text>
+                        )}
+                        {selectedParticipantes.includes(student._id) && (
+                          <View style={styles.checkMark}>
+                            <Text style={styles.checkText}>✓</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.studentNombre}>{student.nombre}</Text>
+                      <Text style={styles.studentApellido}>{student.apellido}</Text>
+                      <Text style={styles.studentDivision}>{student.division?.nombre}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
             
 
           </View>
@@ -499,27 +518,27 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
 const styles = StyleSheet.create({
   homeContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: 50, // Reducido para eliminar espacio extra
+    backgroundColor: '#F8F9FA',
+    paddingTop: 50,
   },
   scrollContainer: {
     flex: 1,
   },
-  actividadTitleContainer: {
+  unifiedHeaderContainer: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 25,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 20,
+    borderRadius: 15,
   },
   actividadTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#0E5FCE',
     textAlign: 'center',
-  },
-  mediaButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingHorizontal: 60,
-    marginBottom: 30,
+    marginBottom: 20,
   },
   mediaButton: {
     position: 'relative',
@@ -541,14 +560,16 @@ const styles = StyleSheet.create({
     bottom: -5,
     right: -5,
     backgroundColor: '#FF8C42',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    borderRadius: 15,
+    width: 30,
+    height: 30,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
   mediaPlusText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
@@ -556,18 +577,22 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20,
     paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    borderRadius: 15,
+    paddingVertical: 15,
   },
   selectedImagesTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FF8C42',
-
-    marginBottom: 10,
+    marginBottom: 15,
+    textAlign: 'center',
   },
   selectedImageContainer: {
     width: 100,
     height: 100,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#E0E0E0',
     marginRight: 10,
     position: 'relative',
@@ -575,16 +600,16 @@ const styles = StyleSheet.create({
   selectedImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   removeImageButton: {
     position: 'absolute',
-    top: 5,
-    right: 5,
+    top: -5,
+    right: -5,
     backgroundColor: '#FF8C42',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
+    borderRadius: 12,
+    width: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -592,12 +617,16 @@ const styles = StyleSheet.create({
   },
   removeImageText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   formContainer: {
     paddingHorizontal: 20,
     paddingBottom: 10,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    borderRadius: 15,
+    paddingVertical: 20,
   },
   formFieldContainer: {
     marginBottom: 25,
@@ -611,7 +640,6 @@ const styles = StyleSheet.create({
   requiredAsterisk: {
     fontSize: 16,
     color: '#FF8C42',
-
   },
   formSubtext: {
     fontSize: 14,
@@ -619,41 +647,41 @@ const styles = StyleSheet.create({
     fontWeight: 'normal',
   },
   formInput: {
-    borderWidth: 1,
-    borderColor: '#0E5FCE',
-    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
     padding: 15,
     fontSize: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
     minHeight: 50,
     color: '#0E5FCE',
   },
   formTextArea: {
-    borderWidth: 1,
-    borderColor: '#0E5FCE',
-    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
     padding: 15,
     fontSize: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
     minHeight: 120,
     color: '#0E5FCE',
   },
   submitButtonContainer: {
     paddingHorizontal: 20,
     paddingBottom: 120,
-    marginTop: 5,
+    marginTop: 20,
   },
   submitButton: {
     backgroundColor: '#FF8C42',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 5,
+    paddingVertical: 18,
+    paddingHorizontal: 40,
+    borderRadius: 15,
     alignItems: 'center',
   },
   submitButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   submitButtonDisabled: {
     backgroundColor: '#B3D4F1',
@@ -723,11 +751,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingHorizontal: 20,
     marginBottom: 20,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 15,
+    paddingVertical: 20,
   },
   studentItem: {
     width: '22%',
     alignItems: 'center',
     marginBottom: 20,
+    padding: 4,
   },
   studentItemSelected: {
     opacity: 0.7,
@@ -755,15 +787,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -5,
     bottom: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#0E5FCE',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   checkText: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
@@ -785,6 +819,39 @@ const styles = StyleSheet.create({
   },
   selectedParticipantesList: {
     marginTop: 10,
+  },
+  // Estilos adicionales para el nuevo diseño
+  studentsSection: {
+    marginBottom: 20,
+  },
+  studentsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  selectAllButton: {
+    backgroundColor: '#0E5FCE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  selectAllButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  noStudentsText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#666666',
+    fontStyle: 'italic',
+  },
+  loadingText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#666666',
+    fontStyle: 'italic',
   },
 });
 

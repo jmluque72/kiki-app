@@ -10,6 +10,7 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { fonts } from '../src/config/fonts';
 import { useLoading } from '../contexts/LoadingContext';
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -21,9 +22,32 @@ interface LoginScreenProps {
   onShowForgotPassword?: () => void;
 }
 
+// Componente de icono de ojo
+const EyeIcon = ({ size = 20, isVisible = false }: { size?: number; isVisible?: boolean }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 4C16.418 4 20.418 6.586 22 11C20.418 15.414 16.418 18 12 18C7.582 18 3.582 15.414 2 11C3.582 6.586 7.582 4 12 4Z"
+      stroke={isVisible ? "#9CA3AF" : "#FFFFFF"}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Circle
+      cx="12"
+      cy="11"
+      r="3"
+      stroke={isVisible ? "#9CA3AF" : "#FFFFFF"}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
 const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { showLoading, hideLoading } = useLoading();
   const { login } = useAuth();
@@ -117,6 +141,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
               autoCapitalize="none"
               autoComplete="email"
               placeholderTextColor="#B3D4F1"
+              selectionColor="#FFFFFF"
               onFocus={() => setFocusedField('email')}
               onBlur={() => setFocusedField(null)}
             />
@@ -133,16 +158,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
             ]}>
               Contraseña
             </Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoComplete="password"
-              placeholderTextColor="#B3D4F1"
-              onFocus={() => setFocusedField('password')}
-              onBlur={() => setFocusedField(null)}
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+                placeholderTextColor="#B3D4F1"
+                selectionColor="#FFFFFF"
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <EyeIcon size={20} isVisible={showPassword} />
+              </TouchableOpacity>
+            </View>
             <View style={[
               styles.inputLine,
               focusedField === 'password' && styles.inputLineFocused
@@ -229,6 +263,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     paddingVertical: 6,
     paddingHorizontal: 0,
+    paddingRight: 50,
+  },
+  passwordContainer: {
+    position: 'relative',
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 0,
+    top: 2,
+    padding: 8,
   },
   inputLine: {
     height: 1,

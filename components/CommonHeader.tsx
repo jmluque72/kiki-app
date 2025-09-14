@@ -23,51 +23,100 @@ interface CommonHeaderProps {
 }
 
 const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpenMenu, activeStudent }) => {
-  const { selectedInstitution, userAssociations } = useInstitution();
-  const { user } = useAuth();
+  const { selectedInstitution, userAssociations, getActiveInstitution } = useInstitution();
+  const { user, activeAssociation } = useAuth();
   const { unreadCount } = useNotifications();
 
+  // Obtener la institución activa desde la asociación activa
+  const activeInstitution = getActiveInstitution();
+
   // Debug logs
+  const currentRole = activeAssociation?.role?.nombre || user?.role?.nombre;
   console.log('🔍 [CommonHeader] Props recibidas:', {
     userRole: user?.role?.nombre,
+    activeAssociationRole: activeAssociation?.role?.nombre,
+    currentRole: currentRole,
     activeStudent: activeStudent ? {
       id: activeStudent._id,
       name: activeStudent.nombre,
       avatar: activeStudent.avatar
     } : null,
+    activeAssociationStudent: activeAssociation?.student ? {
+      id: activeAssociation.student._id,
+      name: activeAssociation.student.nombre,
+      avatar: activeAssociation.student.avatar
+    } : null,
     userAssociationsCount: userAssociations.length
   });
 
-  // Usar la primera institución si no hay ninguna seleccionada
-  const effectiveInstitution = selectedInstitution || (userAssociations.length > 0 ? userAssociations[0] : null);
-
   const getInstitutionName = () => {
-    if (effectiveInstitution) {
-      return effectiveInstitution.account.nombre;
+    if (activeInstitution?.account) {
+      return activeInstitution.account.nombre;
     }
     return 'La Salle'; // Fallback
   };
 
   const getDivisionName = () => {
-    // Si hay una institución seleccionada con división, usarla
-    if (selectedInstitution?.division?.nombre) {
-      return selectedInstitution.division.nombre;
+    if (activeInstitution?.division?.nombre) {
+      return activeInstitution.division.nombre;
     }
-    
-    // Si no hay institución seleccionada, buscar una asociación con división
-    if (userAssociations.length > 0) {
-      const associationWithDivision = userAssociations.find(assoc => assoc.division?.nombre);
-      if (associationWithDivision?.division?.nombre) {
-        return associationWithDivision.division.nombre;
-      }
-    }
-    
     return 'Todas';
   };
 
   const getRoleDisplayNameLocal = () => {
-    if (!user?.role?.nombre) return '';
-    return getRoleDisplayName(user.role.nombre);
+    if (activeAssociation?.role?.nombre) {
+      return getRoleDisplayName(activeAssociation.role.nombre);
+    }
+    if (user?.role?.nombre) {
+      return getRoleDisplayName(user.role.nombre);
+    }
+    return '';
+  };
+
+  const getStudentData = () => {
+    // Obtener el rol actual (priorizar el rol de la asociación activa)
+    const currentRole = activeAssociation?.role?.nombre || user?.role?.nombre;
+    
+    console.log('🔍 [CommonHeader] getStudentData - currentRole:', currentRole);
+    
+    // Solo mostrar datos del estudiante para roles familiares
+    if (currentRole === 'familyadmin' || currentRole === 'familyviewer') {
+      // Usar el estudiante de la asociación activa si está disponible
+      if (activeAssociation?.student) {
+        console.log('🔍 [CommonHeader] getStudentData - Usando estudiante de asociación activa:', {
+          nombre: activeAssociation.student.nombre,
+          apellido: activeAssociation.student.apellido
+        });
+        return {
+          nombre: activeAssociation.student.nombre,
+          apellido: activeAssociation.student.apellido
+        };
+      }
+      
+      // Fallback al activeStudent prop
+      if (activeStudent) {
+        console.log('🔍 [CommonHeader] getStudentData - Usando activeStudent prop:', {
+          nombre: activeStudent.nombre,
+          apellido: activeStudent.apellido
+        });
+        return {
+          nombre: activeStudent.nombre,
+          apellido: activeStudent.apellido
+        };
+      }
+    }
+    
+    // Para coordinadores y otros roles, no mostrar datos del estudiante
+    console.log('🔍 [CommonHeader] getStudentData - No mostrar estudiante para rol:', currentRole);
+    return null;
+  };
+
+  const getStudentName = () => {
+    const studentData = getStudentData();
+    if (studentData) {
+      return `${studentData.nombre} ${studentData.apellido}`;
+    }
+    return '';
   };
 
   return (
@@ -91,56 +140,129 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
             resizeMode="contain"
           />
           {/* Badge de notificaciones sin leer */}
-          {user?.role?.nombre === 'familyadmin' || user?.role?.nombre === 'familyviewer' ? (
-            unreadCount > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </View>
-            )
-          ) : null}
+          {(() => {
+            const currentRole = activeInstitution?.role?.nombre || user?.role?.nombre;
+            return (currentRole === 'familyadmin' || currentRole === 'familyviewer') ? (
+              unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )
+            ) : null;
+          })()}
         </TouchableOpacity>
       </View>
 
       {/* Sección azul dividida en 3 partes */}
       <View style={styles.greetingSection}>
-        {/* División y Rol */}
+        {/* Nombre del Estudiante y Rol */}
         <View style={styles.sectionPart}>
-          <Text style={styles.sectionValue}>
-            {getDivisionName()}
-          </Text>
-          {getRoleDisplayNameLocal() && (
-            <Text style={styles.roleText}>
-              {getRoleDisplayNameLocal()}
-            </Text>
-          )}
+          {(() => {
+            const currentRole = activeAssociation?.role?.nombre || user?.role?.nombre;
+            const studentData = getStudentData();
+            
+            // Para roles familiares, mostrar nombre y apellido en líneas separadas
+            if ((currentRole === 'familyadmin' || currentRole === 'familyviewer') && studentData) {
+              return (
+                <>
+                  <Text style={styles.sectionValue}>
+                    {studentData.nombre}
+                  </Text>
+                  <Text style={styles.sectionValue}>
+                    {studentData.apellido}
+                  </Text>
+                  {getRoleDisplayNameLocal() && (
+                    <Text style={styles.roleText}>
+                      {getRoleDisplayNameLocal()}
+                    </Text>
+                  )}
+                </>
+              );
+            }
+            
+            // Para otros roles, mostrar el nombre completo en una línea
+            if (getStudentName()) {
+              return (
+                <>
+                  <Text style={styles.sectionValue}>
+                    {getStudentName()}
+                  </Text>
+                  {getRoleDisplayNameLocal() && (
+                    <Text style={styles.roleText}>
+                      {getRoleDisplayNameLocal()}
+                    </Text>
+                  )}
+                </>
+              );
+            }
+            
+            // Si no hay estudiante, solo mostrar el rol
+            if (getRoleDisplayNameLocal()) {
+              return (
+                <Text style={styles.roleText}>
+                  {getRoleDisplayNameLocal()}
+                </Text>
+              );
+            }
+            
+            return null;
+          })()}
         </View>
         
         {/* Avatar centrado */}
         <View style={styles.avatarSection}>
           <View style={styles.avatar}>
-            {user?.role?.nombre === 'coordinador' && user?.avatar ? (
-              <Image 
-                source={{ uri: user.avatar }} 
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
-            ) : (user?.role?.nombre === 'familyadmin' || user?.role?.nombre === 'familyviewer') && activeStudent?.avatar ? (
-              <Image 
-                source={{ uri: activeStudent.avatar }} 
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text style={styles.avatarIcon}>👤</Text>
-            )}
+            {(() => {
+              const currentRole = activeAssociation?.role?.nombre || user?.role?.nombre;
+              
+              console.log('🖼️ [CommonHeader] Avatar logic - currentRole:', currentRole);
+              console.log('🖼️ [CommonHeader] Avatar logic - user?.avatar:', user?.avatar);
+              console.log('🖼️ [CommonHeader] Avatar logic - activeAssociation?.student?.avatar:', activeAssociation?.student?.avatar);
+              console.log('🖼️ [CommonHeader] Avatar logic - activeStudent?.avatar:', activeStudent?.avatar);
+              
+              if (currentRole === 'coordinador' && user?.avatar) {
+                console.log('🖼️ [CommonHeader] Mostrando avatar del coordinador');
+                return (
+                  <Image 
+                    source={{ uri: user.avatar }} 
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                );
+              } else if ((currentRole === 'familyadmin' || currentRole === 'familyviewer') && activeAssociation?.student?.avatar) {
+                console.log('🖼️ [CommonHeader] Mostrando avatar del estudiante desde activeAssociation');
+                return (
+                  <Image 
+                    source={{ uri: activeAssociation.student.avatar }} 
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                );
+              } else if ((currentRole === 'familyadmin' || currentRole === 'familyviewer') && activeStudent?.avatar) {
+                console.log('🖼️ [CommonHeader] Mostrando avatar del estudiante desde activeStudent prop');
+                return (
+                  <Image 
+                    source={{ uri: activeStudent.avatar }} 
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                );
+              } else {
+                console.log('🖼️ [CommonHeader] Mostrando placeholder - no se encontró avatar');
+                return <Text style={styles.avatarIcon}>👤</Text>;
+              }
+            })()}
           </View>
         </View>
         
-        {/* Institución */}
+        {/* Institución y División */}
         <View style={styles.sectionPart}>
           <Text style={styles.sectionValue}>{getInstitutionName()}</Text>
+          <Text style={styles.divisionText}>
+            {getDivisionName()}
+          </Text>
         </View>
       </View>
     </>
@@ -219,6 +341,20 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   roleText: {
+    fontSize: 12,
+    fontWeight: 'normal',
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  studentNameText: {
+    fontSize: 12,
+    fontWeight: 'normal',
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  divisionText: {
     fontSize: 12,
     fontWeight: 'normal',
     color: '#FFFFFF',

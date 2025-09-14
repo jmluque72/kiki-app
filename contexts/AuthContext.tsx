@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient, setAuthToken, setGlobalLogout } from '../src/services/api';
+import { ActiveAssociationService, ActiveAssociation } from '../src/services/activeAssociationService';
 
 interface User {
   _id: string;
@@ -11,6 +13,7 @@ interface User {
     nombre: string;
     descripcion: string;
   };
+  isFirstLogin?: boolean;
 }
 
 interface Association {
@@ -33,11 +36,14 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   associations: Association[];
+  activeAssociation: ActiveAssociation | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   login: (userData: User) => void; // Sobrecarga para actualizar usuario
   logout: () => Promise<void>;
   isAuthenticated: boolean;
+  refreshActiveAssociation: () => Promise<void>;
+  updateUserAfterPasswordChange: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,12 +56,14 @@ const STORAGE_KEYS = {
   TOKEN: 'auth_token',
   USER: 'auth_user',
   ASSOCIATIONS: 'auth_associations',
+  ACTIVE_ASSOCIATION: 'auth_active_association'
 };
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [associations, setAssociations] = useState<Association[]>([]);
+  const [activeAssociation, setActiveAssociation] = useState<ActiveAssociation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Cargar datos guardados al iniciar la app
@@ -72,10 +80,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('🔄 Cargando datos de autenticación guardados...');
       
-      const [storedToken, storedUser, storedAssociations] = await Promise.all([
+      const [storedToken, storedUser, storedAssociations, storedActiveAssociation] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
         AsyncStorage.getItem(STORAGE_KEYS.USER),
         AsyncStorage.getItem(STORAGE_KEYS.ASSOCIATIONS),
+        AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_ASSOCIATION),
       ]);
 
       if (storedToken && storedUser) {
@@ -99,6 +108,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setToken(storedToken);
         setUser(userData);
         setAssociations(associationsData);
+        
+        // Cargar asociación activa si existe
+        if (storedActiveAssociation) {
+          const activeAssociationData = JSON.parse(storedActiveAssociation);
+          setActiveAssociation(activeAssociationData);
+          console.log('🎯 Asociación activa cargada:', activeAssociationData.account.nombre);
+        }
         
         // Configurar el token en el cliente API
         setAuthToken(storedToken);
@@ -130,9 +146,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         AsyncStorage.removeItem(STORAGE_KEYS.TOKEN),
         AsyncStorage.removeItem(STORAGE_KEYS.USER),
         AsyncStorage.removeItem(STORAGE_KEYS.ASSOCIATIONS),
+        AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_ASSOCIATION),
       ]);
     } catch (error) {
       console.error('Error clearing auth data:', error);
+    }
+  };
+
+  const refreshActiveAssociation = async () => {
+    try {
+      console.log('🔄 [AuthContext] Refrescando asociación activa...');
+      const activeAssoc = await ActiveAssociationService.getActiveAssociation();
+      
+      if (activeAssoc) {
+        setActiveAssociation(activeAssoc);
+        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_ASSOCIATION, JSON.stringify(activeAssoc));
+        console.log('✅ [AuthContext] Asociación activa actualizada:', activeAssoc.account.nombre);
+      } else {
+        setActiveAssociation(null);
+        await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_ASSOCIATION);
+        console.log('ℹ️ [AuthContext] No hay asociación activa');
+      }
+    } catch (error) {
+      console.error('❌ [AuthContext] Error refrescando asociación activa:', error);
     }
   };
 
@@ -161,20 +197,50 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (response.data.success) {
-        const { token: newToken, user: userData } = response.data.data;
+        const { token: newToken, user: userData, activeAssociation: activeAssociationData } = response.data.data;
         
         console.log('✅ Login exitoso');
         console.log('👤 Perfil del usuario:');
         console.log('   - ID:', userData._id);
         console.log('   - Nombre:', userData.name);
         console.log('   - Email:', userData.email);
-        console.log('   - Rol:', userData.role.nombre);
+        console.log('   - Rol (del usuario):', userData.role.nombre);
         console.log('   - Descripción del rol:', userData.role.descripcion);
+        
+        if (activeAssociationData) {
+          console.log('🎯 Asociación activa recibida del login:');
+          console.log('   - Cuenta:', activeAssociationData.account.nombre);
+          console.log('   - División:', activeAssociationData.division?.nombre || 'Sin división');
+          console.log('   - Rol activo:', activeAssociationData.role.nombre);
+          console.log('   - Estudiante:', activeAssociationData.student?.name || 'Sin estudiante');
+        } else {
+          console.log('ℹ️ No hay asociación activa en el login');
+        }
         
         console.log('🔑 Token recibido:', newToken ? 'Token válido' : 'Sin token');
         
         setToken(newToken);
+        console.log('🔑 [AUTH CONTEXT] Estableciendo usuario con datos:', {
+          email: userData.email,
+          isFirstLogin: userData.isFirstLogin,
+          name: userData.name
+        });
         setUser(userData);
+        
+        // Detectar primer login inmediatamente después del login
+        if (userData.isFirstLogin) {
+          console.log('🔑 [AUTH CONTEXT] ¡PRIMER LOGIN DETECTADO! Usuario debe cambiar contraseña');
+          // Marcar que debe mostrar pantalla de cambio de contraseña
+          // El App.tsx detectará esto con el useEffect
+        } else {
+          console.log('🔑 [AUTH CONTEXT] Usuario ya cambió contraseña, continuando flujo normal');
+        }
+        
+        // Configurar la asociación activa si viene del login
+        if (activeAssociationData) {
+          setActiveAssociation(activeAssociationData);
+          await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_ASSOCIATION, JSON.stringify(activeAssociationData));
+        }
         
         // Configurar el token en el cliente API
         setAuthToken(newToken);
@@ -206,6 +272,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Guardar asociaciones en AsyncStorage
           await AsyncStorage.setItem(STORAGE_KEYS.ASSOCIATIONS, JSON.stringify(userAssociations));
           
+          // Obtener la asociación activa solo si no vino del login
+          if (!activeAssociationData) {
+            console.log('🎯 Obteniendo asociación activa...');
+            await refreshActiveAssociation();
+          } else {
+            console.log('✅ Asociación activa ya configurada desde el login');
+          }
+          
           // Verificar si el usuario tiene asociaciones
           if (userAssociations.length === 0) {
             console.log('⚠️ Usuario sin asociaciones');
@@ -222,25 +296,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             throw new Error('No tienes asociaciones activas. Contacta al administrador.');
           }
           
-          // Mostrar alert con los datos de las asociaciones
-          const associationsInfo = userAssociations.map((assoc, index) => {
-            const studentInfo = assoc.student 
-              ? `\n   Estudiante: ${assoc.student.nombre} ${assoc.student.apellido}${assoc.student.avatar ? ' (con avatar)' : ''}`
-              : '\n   Sin estudiante asociado';
-            
-            return `${index + 1}. ${assoc.account.nombre}${assoc.division ? ` - ${assoc.division.nombre}` : ''} (${assoc.role.nombre})${studentInfo}`;
-          }).join('\n\n');
-          
-          Alert.alert(
-            '✅ Login Exitoso',
-            `Usuario: ${userData.name || userData.email}\n\nAsociaciones encontradas (${userAssociations.length}):\n\n${associationsInfo}`,
-            [
-              {
-                text: 'OK',
-                onPress: () => console.log('Usuario confirmó alert de asociaciones')
-              }
-            ]
-          );
+          // Login exitoso sin mostrar alert
+          console.log('✅ Login exitoso para:', userData.name || userData.email);
+          console.log('🔑 [AUTH CONTEXT] isFirstLogin del backend:', userData.isFirstLogin);
+          console.log('📋 Asociaciones encontradas:', userAssociations.length);
           
           return true;
         } catch (sharedError: any) {
@@ -316,9 +375,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setAuthToken(null);
       
       // Limpiar estado
+      console.log('🔐 [LOGOUT] Limpiando estado del usuario...');
       setToken(null);
       setUser(null);
       setAssociations([]);
+      setActiveAssociation(null);
+      console.log('🔐 [LOGOUT] Estado limpiado - user: null, token: null');
       
       // Limpiar AsyncStorage
       await clearAuthData();
@@ -330,6 +392,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setToken(null);
       setUser(null);
       setAssociations([]);
+      setActiveAssociation(null);
+    }
+  };
+
+  const updateUserAfterPasswordChange = () => {
+    if (user) {
+      console.log('🔑 [AUTH CONTEXT] Actualizando usuario después de cambio de contraseña');
+      console.log('🔑 [AUTH CONTEXT] Usuario antes:', user.email, 'isFirstLogin:', user.isFirstLogin);
+      setUser({
+        ...user,
+        isFirstLogin: false
+      });
+      console.log('🔑 [AUTH CONTEXT] Usuario actualizado con isFirstLogin: false');
     }
   };
 
@@ -337,10 +412,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     token,
     associations,
+    activeAssociation,
     isLoading,
     login,
     logout,
     isAuthenticated: !!token && !!user,
+    refreshActiveAssociation,
+    updateUserAfterPasswordChange,
   };
 
   return (

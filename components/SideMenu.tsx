@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  Alert
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -14,10 +15,11 @@ import { getRoleDisplayName } from '../src/utils/roleTranslations';
 interface SideMenuProps {
   navigation: any;
   onClose: () => void;
+  onOpenActiveAssociation?: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose }) => {
-  const { user, logout } = useAuth();
+const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation }) => {
+  const { user, logout, associations } = useAuth();
   const { selectedInstitution } = useInstitution();
 
   const menuItems = [
@@ -45,6 +47,16 @@ const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose }) => {
         // Navegar a asociaciones
       }
     },
+    // Solo mostrar si el usuario tiene múltiples asociaciones
+    ...(associations.length > 1 ? [{
+      id: 'activeAssociation',
+      title: 'Cambiar Asociación Activa',
+      onPress: () => {
+        Alert.alert('DEBUG', 'Se hizo clic en Cambiar Asociación Activa');
+        onClose();
+        onOpenActiveAssociation?.();
+      }
+    }] : []),
     {
       id: 'settings',
       title: 'Configuración',

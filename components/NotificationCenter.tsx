@@ -12,6 +12,7 @@ import {
   Image
 } from 'react-native';
 import { useNotifications } from '../src/hooks/useNotifications';
+import { NotificationService } from '../src/services/notificationService';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLoading } from '../contexts/LoadingContext';
@@ -30,7 +31,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   const [formData, setFormData] = useState({
     title: '',
     message: '',
-    type: 'informacion' as 'informacion' | 'comunicacion',
+    type: 'coordinador' as string, // Siempre será "coordinador" desde la app
     recipients: [] as string[]
   });
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -48,13 +49,18 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     console.log('📱 NotificationCenter - Cantidad:', notifications?.length || 0);
   }, [notifications]);
   
-  // Verificar si el usuario es coordinador
-  const isCoordinador = user?.role?.nombre === 'coordinador';
+  // Verificar si el usuario es coordinador usando la asociación activa
+  const { activeAssociation } = useAuth();
+  const isCoordinador = activeAssociation?.role?.nombre === 'coordinador';
   
   // Debug temporal para verificar el rol
   console.log('NotificationCenter - Usuario:', user?.name);
-  console.log('NotificationCenter - Rol completo:', user?.role);
-  console.log('NotificationCenter - Rol nombre:', user?.role?.nombre);
+  console.log('NotificationCenter - Rol del usuario:', user?.role?.nombre);
+  console.log('NotificationCenter - Asociación activa:', activeAssociation ? {
+    account: activeAssociation.account?.nombre,
+    role: activeAssociation.role?.nombre,
+    division: activeAssociation.division?.nombre
+  } : null);
   console.log('NotificationCenter - Es coordinador:', isCoordinador);
   
   // Hook para obtener estudiantes
@@ -100,6 +106,29 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     }
   };
 
+  const handleNotificationClick = async (notification: any) => {
+    try {
+      // Marcar como leída si no está leída
+      if (!isNotificationRead(notification)) {
+        await markAsRead(notification._id);
+      }
+      
+      // Para tutores (familyadmin/familyviewer): mostrar popup simple
+      // Para coordinadores: mostrar popup con detalles completos
+      if (isCoordinador) {
+        // Coordinadores ven detalles completos con estadísticas
+        setSelectedNotificationDetails(notification);
+        setShowDetailsModal(true);
+      } else {
+        // Tutores ven popup simple sin datos de lecturas
+        setSelectedNotificationDetails(notification);
+        setShowDetailsModal(true);
+      }
+    } catch (error) {
+      console.error('Error handling notification click:', error);
+    }
+  };
+
   const handleDeleteNotification = async (notificationId: string) => {
     Alert.alert(
       'Eliminar Notificación',
@@ -127,7 +156,6 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   const handleShowDetails = async (notificationId: string) => {
     try {
       setLoadingDetails(true);
-      const { NotificationService } = await import('../src/services/notificationService');
       const details = await NotificationService.getNotificationDetails(notificationId);
       setSelectedNotificationDetails(details);
       setShowDetailsModal(true);
@@ -261,7 +289,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         
         <TouchableOpacity
           style={styles.notificationContent}
-          onPress={() => handleMarkAsRead(item._id)}
+          onPress={() => handleNotificationClick(item)}
           activeOpacity={0.7}
         >
           <View style={styles.notificationHeader}>
@@ -328,64 +356,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   };
 
   const renderSendForm = () => (
-    <View style={styles.sendFormContainer}>
+    <ScrollView 
+      style={styles.sendFormContainer}
+      contentContainerStyle={styles.sendFormContent}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.formTitle}>Enviar Nueva Notificación</Text>
       
-      {/* Tipo de notificación */}
-      <View style={styles.typeSelector}>
-        <Text style={styles.label}>Tipo de notificación:</Text>
-        <View style={styles.typeButtons}>
-          <TouchableOpacity
-            style={[
-              styles.typeButton,
-              formData.type === 'informacion' && styles.typeButtonActive
-            ]}
-            onPress={() => setFormData(prev => ({ ...prev, type: 'informacion' }))}
-            activeOpacity={0.7}
-          >
-            <View style={styles.typeButtonContent}>
-              <Image
-                source={require('../assets/design/icons/kiki_notificaciones.png')}
-                style={[
-                  styles.typeButtonIcon,
-                  formData.type === 'informacion' && styles.typeButtonIconActive
-                ]}
-                resizeMode="contain"
-              />
-              <Text style={[
-                styles.typeButtonText,
-                formData.type === 'informacion' && styles.typeButtonTextActive
-              ]}>Información</Text>
-            </View>
-
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.typeButton,
-              formData.type === 'comunicacion' && styles.typeButtonActive
-            ]}
-            onPress={() => setFormData(prev => ({ ...prev, type: 'comunicacion' }))}
-            activeOpacity={0.7}
-          >
-            <View style={styles.typeButtonContent}>
-              <Image
-                source={require('../assets/design/icons/kiki_mensajes.png')}
-                style={[
-                  styles.typeButtonIcon,
-                  formData.type === 'comunicacion' && styles.typeButtonIconActive
-                ]}
-                resizeMode="contain"
-              />
-              <Text style={[
-                styles.typeButtonText,
-                formData.type === 'comunicacion' && styles.typeButtonTextActive
-              ]}>Comunicación</Text>
-            </View>
-
-          </TouchableOpacity>
-        </View>
-      </View>
 
       {/* Título */}
       <View style={styles.inputContainer}>
@@ -473,7 +450,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
           <Text style={styles.sendButtonText}>Enviar</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 
   return (
@@ -588,110 +565,139 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
               <Text style={styles.loadingText}>Cargando detalles...</Text>
             ) : selectedNotificationDetails ? (
               <View>
-                {/* Información básica */}
+                {/* Información básica - visible para todos */}
                 <View style={styles.detailsSection}>
-                  <Text style={styles.detailsSectionTitle}>Información General</Text>
-                  <View style={styles.detailsItem}>
-                    <Text style={styles.detailsLabel}>Título:</Text>
-                    <Text style={styles.detailsValue}>{selectedNotificationDetails.title}</Text>
-                  </View>
-                  <View style={styles.detailsItem}>
-                    <Text style={styles.detailsLabel}>Mensaje:</Text>
-                    <Text style={styles.detailsValue}>{selectedNotificationDetails.message}</Text>
-                  </View>
-                  <View style={styles.detailsItem}>
-                    <Text style={styles.detailsLabel}>Tipo:</Text>
-                    <Text style={styles.detailsValue}>{selectedNotificationDetails.type.toUpperCase()}</Text>
-                  </View>
-                  <View style={styles.detailsItem}>
-                    <Text style={styles.detailsLabel}>Enviado por:</Text>
-                    <Text style={styles.detailsValue}>{selectedNotificationDetails.sender?.nombre}</Text>
-                  </View>
-                  <View style={styles.detailsItem}>
-                    <Text style={styles.detailsLabel}>Fecha de envío:</Text>
-                    <Text style={styles.detailsValue}>
-                      {new Date(selectedNotificationDetails.sentAt).toLocaleDateString('es-ES', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Estadísticas de lectura */}
-                <View style={styles.detailsSection}>
-                  <Text style={styles.detailsSectionTitle}>Estadísticas de Lectura</Text>
-                  <View style={styles.readStatsContainer}>
-                    <View style={styles.readStatItem}>
-                      <Text style={styles.readStatLabel}>Total destinatarios:</Text>
-                      <Text style={styles.readStatValue}>{selectedNotificationDetails.stats?.totalRecipients || selectedNotificationDetails.recipients?.length || 0}</Text>
+                  <Text style={styles.detailsSectionTitle}>Información de la Notificación</Text>
+                  
+                  {/* Header con icono y tipo */}
+                  <View style={styles.notificationHeaderDetails}>
+                    <Image
+                      source={getTypeIcon(selectedNotificationDetails.type)}
+                      style={styles.notificationIconDetails}
+                      resizeMode="contain"
+                    />
+                    <View style={styles.notificationHeaderInfo}>
+                      <Text style={styles.notificationTitleDetails}>{selectedNotificationDetails.title}</Text>
+                      <View style={[styles.typeBadgeDetails, { backgroundColor: getTypeColor(selectedNotificationDetails.type) }]}>
+                        <Text style={styles.typeTextDetails}>{selectedNotificationDetails.type.toUpperCase()}</Text>
+                      </View>
                     </View>
-                    <View style={styles.readStatItem}>
-                      <Text style={[styles.readStatLabel, { color: '#4CAF50' }]}>Leídas por padres:</Text>
-                      <Text style={[styles.readStatValue, { color: '#4CAF50' }]}>{selectedNotificationDetails.stats?.readByParents || 0}</Text>
+                  </View>
+                  
+                  {/* Mensaje principal */}
+                  <View style={styles.messageContainer}>
+                    <Text style={styles.messageLabel}>Mensaje:</Text>
+                    <Text style={styles.messageText}>{selectedNotificationDetails.message}</Text>
+                  </View>
+                  
+                  {/* Información del remitente y fecha */}
+                  <View style={styles.metaInfoContainer}>
+                    <View style={styles.metaInfoItem}>
+                      <Text style={styles.metaInfoLabel}>Enviado por:</Text>
+                      <Text style={styles.metaInfoValue}>{selectedNotificationDetails.sender?.nombre}</Text>
                     </View>
-                    <View style={styles.readStatItem}>
-                      <Text style={[styles.readStatLabel, { color: '#FF5722' }]}>Pendientes:</Text>
-                      <Text style={[styles.readStatValue, { color: '#FF5722' }]}>
-                        {selectedNotificationDetails.stats?.pendingRecipients || 0}
+                    <View style={styles.metaInfoItem}>
+                      <Text style={styles.metaInfoLabel}>Fecha:</Text>
+                      <Text style={styles.metaInfoValue}>
+                        {new Date(selectedNotificationDetails.sentAt).toLocaleDateString('es-ES', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
                       </Text>
                     </View>
                   </View>
                 </View>
 
-                {/* Lista de destinatarios que leyeron (solo padres) */}
-                {selectedNotificationDetails.readBy && selectedNotificationDetails.readBy.length > 0 && (
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.detailsSectionTitle}>Leída por padres:</Text>
-                    <View style={styles.readByList}>
-                      {selectedNotificationDetails.readBy
-                        .filter((read: any) => read.user?.role?.nombre !== 'coordinador')
-                        .map((read: any, index: number) => (
-                          <View key={index} style={styles.readByItem}>
-                            <Text style={styles.readByUser}>
-                              {read.user?.nombre || 'Usuario desconocido'}
-                            </Text>
-                            <Text style={styles.readByDate}>
-                              {new Date(read.readAt).toLocaleDateString('es-ES', {
-                                day: 'numeric',
-                                month: 'short',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </Text>
-                          </View>
-                        ))}
+                {/* Solo coordinadores ven estadísticas de lectura */}
+                {isCoordinador && (
+                  <>
+                    {/* Estadísticas de lectura */}
+                    <View style={styles.detailsSection}>
+                      <Text style={styles.detailsSectionTitle}>Estadísticas de Lectura</Text>
+                      <View style={styles.readStatsContainer}>
+                        <View style={styles.readStatItem}>
+                          <Text style={styles.readStatLabel}>Total destinatarios:</Text>
+                          <Text style={styles.readStatValue}>{selectedNotificationDetails.stats?.totalRecipients || selectedNotificationDetails.recipients?.length || 0}</Text>
+                        </View>
+                        <View style={styles.readStatItem}>
+                          <Text style={[styles.readStatLabel, { color: '#4CAF50' }]}>Leídas por padres:</Text>
+                          <Text style={[styles.readStatValue, { color: '#4CAF50' }]}>{selectedNotificationDetails.stats?.readByParents || 0}</Text>
+                        </View>
+                        <View style={styles.readStatItem}>
+                          <Text style={[styles.readStatLabel, { color: '#FF5722' }]}>Pendientes:</Text>
+                          <Text style={[styles.readStatValue, { color: '#FF5722' }]}>
+                            {selectedNotificationDetails.stats?.pendingRecipients || 0}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  </View>
+
+                    {/* Lista de destinatarios que leyeron (solo padres) */}
+                    {selectedNotificationDetails.readBy && selectedNotificationDetails.readBy.length > 0 && (
+                      <View style={styles.detailsSection}>
+                        <Text style={styles.detailsSectionTitle}>Leída por padres:</Text>
+                        <View style={styles.readByList}>
+                          {selectedNotificationDetails.readBy
+                            .filter((read: any) => read.user?.role?.nombre !== 'coordinador')
+                            .map((read: any, index: number) => (
+                              <View key={index} style={styles.readByItem}>
+                                <Text style={styles.readByUser}>
+                                  {read.user?.nombre || 'Usuario desconocido'}
+                                </Text>
+                                <Text style={styles.readByDate}>
+                                  {new Date(read.readAt).toLocaleDateString('es-ES', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </Text>
+                              </View>
+                            ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Lista de destinatarios pendientes (estudiantes cuyos padres no leyeron) */}
+                    {selectedNotificationDetails.pendingRecipients && selectedNotificationDetails.pendingRecipients.length > 0 && (
+                      <View style={styles.detailsSection}>
+                        <Text style={styles.detailsSectionTitle}>Pendiente de lectura:</Text>
+                        <View style={styles.unreadByList}>
+                          {selectedNotificationDetails.pendingRecipients.map((recipient: any, index: number) => (
+                            <View key={index} style={styles.unreadByItem}>
+                              <View style={styles.pendingStudentInfo}>
+                                <Text style={styles.pendingStudentName}>
+                                  {recipient.nombre || recipient.name || 'Usuario desconocido'}
+                                </Text>
+                                {recipient.tutor && (
+                                  <Text style={styles.pendingTutorInfo}>
+                                    Tutor: {recipient.tutor.name} ({recipient.tutor.email})
+                                  </Text>
+                                )}
+                                {!recipient.tutor && (
+                                  <Text style={styles.pendingNoTutorInfo}>
+                                    Sin tutor asignado
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </>
                 )}
 
-                {/* Lista de destinatarios pendientes (estudiantes cuyos padres no leyeron) */}
-                {selectedNotificationDetails.pendingRecipients && selectedNotificationDetails.pendingRecipients.length > 0 && (
+                {/* Para tutores: mensaje simple de confirmación */}
+                {!isCoordinador && (
                   <View style={styles.detailsSection}>
-                    <Text style={styles.detailsSectionTitle}>Pendiente de lectura:</Text>
-                    <View style={styles.unreadByList}>
-                      {selectedNotificationDetails.pendingRecipients.map((recipient: any, index: number) => (
-                        <View key={index} style={styles.unreadByItem}>
-                          <View style={styles.pendingStudentInfo}>
-                            <Text style={styles.pendingStudentName}>
-                              {recipient.nombre || recipient.name || 'Usuario desconocido'}
-                            </Text>
-                            {recipient.tutor && (
-                              <Text style={styles.pendingTutorInfo}>
-                                Tutor: {recipient.tutor.name} ({recipient.tutor.email})
-                              </Text>
-                            )}
-                            {!recipient.tutor && (
-                              <Text style={styles.pendingNoTutorInfo}>
-                                Sin tutor asignado
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-                      ))}
+                    <View style={styles.simpleConfirmationContainer}>
+                      <Text style={styles.simpleConfirmationText}>
+                        ✅ Notificación leída correctamente
+                      </Text>
                     </View>
                   </View>
                 )}
@@ -876,13 +882,13 @@ const styles = StyleSheet.create({
   sendFormContainer: {
     flex: 1,
   },
+  sendFormContent: {
+    paddingBottom: 20,
+  },
   formTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333333',
-    marginBottom: 20,
-  },
-  typeSelector: {
     marginBottom: 20,
   },
   label: {
@@ -890,67 +896,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333333',
     marginBottom: 15,
-  },
-  typeButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  typeButton: {
-    flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#F8F9FA',
-    borderWidth: 2,
-    borderColor: '#E9ECEF',
-    position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  typeButtonActive: {
-    backgroundColor: '#0E5FCE',
-    borderColor: '#0E5FCE',
-    shadowColor: '#0E5FCE',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  typeButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  typeButtonIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 8,
-    tintColor: '#666666',
-  },
-  typeButtonText: {
-    fontSize: 14,
-    color: '#666666',
-    fontWeight: '600',
-  },
-  typeButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  typeButtonIconActive: {
-    tintColor: '#FFFFFF',
-  },
-  typeButtonIndicator: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#0E5FCE',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
   inputContainer: {
     marginBottom: 20,
@@ -1299,6 +1244,96 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333333',
     lineHeight: 20,
+  },
+  // Estilos para el nuevo diseño del modal de detalles
+  notificationHeaderDetails: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  notificationIconDetails: {
+    width: 32,
+    height: 32,
+    marginRight: 15,
+    tintColor: '#0E5FCE',
+  },
+  notificationHeaderInfo: {
+    flex: 1,
+  },
+  notificationTitleDetails: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  typeBadgeDetails: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  typeTextDetails: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  messageContainer: {
+    marginBottom: 20,
+    padding: 15,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0E5FCE',
+  },
+  messageLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666666',
+    marginBottom: 8,
+  },
+  messageText: {
+    fontSize: 16,
+    color: '#333333',
+    lineHeight: 22,
+  },
+  metaInfoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  metaInfoItem: {
+    flex: 1,
+    marginRight: 10,
+  },
+  metaInfoLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666666',
+    marginBottom: 4,
+  },
+  metaInfoValue: {
+    fontSize: 14,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  // Estilos para confirmación simple de tutores
+  simpleConfirmationContainer: {
+    backgroundColor: '#E8F5E8',
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  simpleConfirmationText: {
+    fontSize: 16,
+    color: '#2E7D32',
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 
