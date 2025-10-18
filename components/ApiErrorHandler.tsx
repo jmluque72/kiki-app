@@ -1,5 +1,4 @@
 import React from 'react';
-import { Alert } from 'react-native';
 import { useApiError } from '../src/hooks/useApiError';
 
 interface ApiErrorHandlerProps {
@@ -26,9 +25,7 @@ export const ApiErrorHandler: React.FC<ApiErrorHandlerProps> = ({
       }
 
       // Mostrar alerta por defecto
-      Alert.alert(
-        'Error',
-        errorInfo.message,
+      console.log('Error:', errorInfo.message);
         [
           {
             text: 'OK',
@@ -52,9 +49,7 @@ export const useApiErrorHandler = () => {
   const showError = (error: any, customMessage?: string) => {
     const errorInfo = handleApiError(error, customMessage);
     
-    Alert.alert(
-      'Error',
-      errorInfo.message,
+    console.log('Error:', errorInfo.message);
       [
         {
           text: 'OK',

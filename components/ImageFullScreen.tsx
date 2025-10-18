@@ -12,6 +12,8 @@ import {
   Text,
   FlatList
 } from 'react-native';
+import { Video } from 'react-native-video';
+import { getMediaType } from '../src/utils/mediaUtils';
 import Toast from 'react-native-toast-message';
 import favoriteService from '../src/services/favoriteService';
 import { toastService } from '../src/services/toastService';
@@ -143,23 +145,41 @@ const ImageFullScreen: React.FC<ImageFullScreenProps> = ({
             const index = Math.round(event.nativeEvent.contentOffset.x / width);
             onIndexChange(index);
           }}
-          renderItem={({ item }) => (
-            <ScrollView
-              style={styles.imageContainer}
-              contentContainerStyle={styles.imageContentContainer}
-              maximumZoomScale={3}
-              minimumZoomScale={1}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-            >
-              <Image
-                source={{ uri: item }}
-                style={styles.image}
-                resizeMode="contain"
-              />
-            </ScrollView>
-          )}
+          renderItem={({ item }) => {
+            const mediaType = getMediaType(item);
+            
+            return (
+              <ScrollView
+                style={styles.imageContainer}
+                contentContainerStyle={styles.imageContentContainer}
+                maximumZoomScale={mediaType === 'video' ? 1 : 3}
+                minimumZoomScale={1}
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
+                {mediaType === 'video' ? (
+                  <Video
+                    source={{ uri: item }}
+                    style={styles.video}
+                    resizeMode="contain"
+                    controls={true}
+                    paused={false}
+                    repeat={false}
+                    onError={(error) => {
+                      console.error('Video error:', error);
+                    }}
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: item }}
+                    style={styles.image}
+                    resizeMode="contain"
+                  />
+                )}
+              </ScrollView>
+            );
+          }}
           keyExtractor={(item, index) => index.toString()}
           getItemLayout={(data, index) => ({
             length: width,
@@ -293,6 +313,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   image: {
+    width: width,
+    height: height,
+  },
+  video: {
     width: width,
     height: height,
   },

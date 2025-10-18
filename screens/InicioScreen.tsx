@@ -14,14 +14,28 @@ import { fonts } from '../src/config/fonts';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useActivities } from '../src/hooks/useActivities';
 import CommonHeader from '../components/CommonHeader';
-import { useAuth } from '../contexts/AuthContext';
+import withSideMenu from '../components/withSideMenu';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 import ActivityDetailModal from '../components/ActivityDetailModal';
 import CustomCalendar from '../components/CustomCalendar';
+import { getFirstMedia, getMediaType } from '../src/utils/mediaUtils';
 
-const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
+const InicioScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications: () => void; onOpenMenu?: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
-  const { user, activeAssociation } = useAuth();
+  
+  // Verificación de seguridad para useAuth
+  let user, activeAssociation;
+  try {
+    const authContext = useAuth();
+    user = authContext.user;
+    activeAssociation = authContext.activeAssociation;
+  } catch (error) {
+    console.error('❌ [InicioScreen] Error accediendo a useAuth:', error);
+    // Valores por defecto si hay error
+    user = null;
+    activeAssociation = null;
+  }
   
   // Usar la primera institución si no hay ninguna seleccionada
   const effectiveInstitution = selectedInstitution || (userAssociations.length > 0 ? userAssociations[0] : null);
@@ -90,7 +104,7 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
   }, [activities, effectiveInstitution]);
 
   const getInstitutionName = () => {
-    if (effectiveInstitution) {
+    if (effectiveInstitution && effectiveInstitution.account) {
       return effectiveInstitution.account.nombre;
     }
     return 'La Salle'; // Fallback
@@ -215,12 +229,13 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
 
   return (
     <View style={styles.homeContainer}>
-              <CommonHeader 
-          onOpenNotifications={onOpenNotifications} 
-          activeStudent={getActiveStudent()}
-        />
-      
-      <ScrollView 
+      <CommonHeader 
+        onOpenNotifications={onOpenNotifications} 
+        onOpenMenu={onOpenMenu}
+        showMenuButton={true}
+        activeStudent={getActiveStudent()}
+      />
+        <ScrollView 
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContentContainer}
         showsVerticalScrollIndicator={true}
@@ -281,7 +296,7 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
             </View>
           ) : (
             <View style={styles.timelineTable}>
-              {activities.slice(0, 5).map((activity, index) => (
+              {activities.map((activity, index) => (
                 <TouchableOpacity 
                   key={activity._id} 
                   style={styles.timelineRow}
@@ -293,21 +308,55 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
                     {/* Círculo en el top del border */}
                     <View style={styles.borderCircle} />
                     
-                    {/* Mostrar primera imagen o ícono por defecto */}
+                    {/* Mostrar primera imagen/video o ícono por defecto */}
                     {(activity as any).imagenes && (activity as any).imagenes.length > 0 ? (
-                      <View style={styles.timelineImageContainer}>
-                        <Image 
-                          source={{ uri: (activity as any).imagenes[0] }}
-                          style={styles.timelineImage}
-                          resizeMode="cover"
-                        />
-                        {/* Contador de imágenes múltiples */}
-                        {(activity as any).imagenes.length > 1 && (
-                          <View style={styles.imageCountBadge}>
-                            <Text style={styles.imageCountText}>+{(activity as any).imagenes.length - 1}</Text>
+                      (() => {
+                        const firstMedia = getFirstMedia((activity as any).imagenes);
+                        if (!firstMedia) {
+                          return (
+                            <View style={styles.timelineIcon}>
+                              <Text style={styles.timelineIconText}>
+                                {getActivityEmoji(activity.tipo)}
+                              </Text>
+                            </View>
+                          );
+                        }
+
+                        return (
+                          <View style={styles.timelineImageContainer}>
+                            {firstMedia.type === 'video' ? (
+                              // Preview especial para videos
+                              <View style={styles.videoPreviewContainer}>
+                                <View style={styles.videoPreviewBackground}>
+                                  <View style={styles.videoPreviewIcon}>
+                                    <Text style={styles.videoPreviewIconText}>🎬</Text>
+                                  </View>
+                                  <Text style={styles.videoPreviewText}>VIDEO</Text>
+                                </View>
+                                {/* Overlay de play */}
+                                <View style={styles.videoOverlay}>
+                                  <View style={styles.videoPlayButton}>
+                                    <Text style={styles.videoPlayIcon}>▶</Text>
+                                  </View>
+                                </View>
+                              </View>
+                            ) : (
+                              // Imagen normal
+                              <Image 
+                                source={{ uri: firstMedia.url }}
+                                style={styles.timelineImage}
+                                resizeMode="cover"
+                              />
+                            )}
+                            {/* Contador de media múltiple */}
+                            {(activity as any).imagenes.length > 1 && (
+                              <View style={styles.imageCountBadge}>
+                                <Text style={styles.imageCountText}>+{(activity as any).imagenes.length - 1}</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                      </View>
+                        );
+                      })()
                     ) : (
                       <View style={styles.timelineIcon}>
                         <Text style={styles.timelineIconText}>
@@ -363,6 +412,7 @@ const InicioScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void
           />
         </View>
       </Modal>
+      
     </View>
   );
 };
@@ -464,6 +514,34 @@ const styles = StyleSheet.create({
     borderRadius: 55,
     borderWidth: 3,
     borderColor: '#FF8C42',
+  },
+  videoPreviewContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 3,
+    borderColor: '#FF8C42',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  videoPreviewBackground: {
+    flex: 1,
+    backgroundColor: '#0E5FCE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 52,
+  },
+  videoPreviewIcon: {
+    marginBottom: 4,
+  },
+  videoPreviewIconText: {
+    fontSize: 24,
+  },
+  videoPreviewText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
   imageCountBadge: {
     position: 'absolute',
@@ -667,6 +745,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // Estilos para videos
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 52,
+  },
+  videoPlayButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  videoPlayIcon: {
+    fontSize: 16,
+    color: '#0E5FCE',
+    fontWeight: 'bold',
+    marginLeft: 2, // Ajuste visual para centrar el triángulo
+  },
+  videoIcon: {
+    fontSize: 20,
+    color: '#FFFFFF',
+  },
 });
 
-export default InicioScreen; 
+export default withSideMenu(InicioScreen); 

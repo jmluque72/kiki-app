@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Association } from '../src/services/api';
 import { Shared } from '../src/services/sharedService';
-import { useAuth } from './AuthContext';
+import { useAuth } from './AuthContextHybrid';
 
 interface InstitutionContextType {
   selectedInstitution: Shared | null;
@@ -81,6 +81,7 @@ export const InstitutionProvider: React.FC<InstitutionProviderProps> = ({ childr
         name: activeAssociation.student.nombre,
         avatar: activeAssociation.student.avatar
       });
+      console.log('🔍 [GET ACTIVE STUDENT] Avatar URL completa:', activeAssociation.student.avatar);
       return activeAssociation.student;
     }
     

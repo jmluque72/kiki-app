@@ -42,10 +42,34 @@ class SharedService {
   // Obtener asociaciones del usuario
   static async getUserAssociations(): Promise<Shared[]> {
     try {
+      console.log('🔍 [SHARED SERVICE] ===== OBTENIENDO ASOCIACIONES =====');
+      console.log('🔍 [SHARED SERVICE] URL completa:', apiClient.defaults.baseURL + '/shared/user');
+      
       const response = await apiClient.get('/shared/user');
-      return response.data.data.associations || [];
+      
+      console.log('✅ [SHARED SERVICE] Respuesta recibida del servidor');
+      console.log('📊 [SHARED SERVICE] Status:', response.status);
+      console.log('📊 [SHARED SERVICE] Data recibida:', JSON.stringify(response.data, null, 2));
+      
+      const associations = response.data.data.associations || [];
+      console.log('📦 [SHARED SERVICE] Asociaciones procesadas:', associations.length);
+      
+      associations.forEach((assoc: any, index: number) => {
+        console.log(`📦 [SHARED SERVICE] Asociación ${index + 1}:`, {
+          id: assoc._id,
+          studentId: assoc.student?._id,
+          studentName: assoc.student?.nombre,
+          studentAvatar: assoc.student?.avatar,
+          hasAvatar: !!assoc.student?.avatar,
+          avatarType: assoc.student?.avatar ? (assoc.student.avatar.startsWith('http') ? 'URL completa' : 'Key de S3') : 'Sin avatar'
+        });
+      });
+      
+      return associations;
     } catch (error: any) {
+      console.error('❌ [SHARED SERVICE] Error obteniendo asociaciones:', error);
       if (error.response?.data) {
+        console.error('❌ [SHARED SERVICE] Error response data:', error.response.data);
         throw error;
       }
       throw new Error('Error al obtener asociaciones');

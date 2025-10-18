@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Alert,
   ActivityIndicator
 } from 'react-native';
 import { useApiErrorHandler } from './ApiErrorHandler';
@@ -79,27 +78,27 @@ const PickupModal: React.FC<PickupModalProps> = ({
 
   const validateForm = () => {
     if (!formData.nombre.trim()) {
-      Alert.alert('Error', 'El nombre es obligatorio');
+      console.log('Error: El nombre es obligatorio');
       return false;
     }
     if (!formData.apellido.trim()) {
-      Alert.alert('Error', 'El apellido es obligatorio');
+      console.log('Error: El apellido es obligatorio');
       return false;
     }
     if (!formData.dni.trim()) {
-      Alert.alert('Error', 'El DNI es obligatorio');
+      console.log('Error: El DNI es obligatorio');
       return false;
     }
     if (!formData.relacion.trim()) {
-      Alert.alert('Error', 'La relación es obligatoria');
+      console.log('Error: La relación es obligatoria');
       return false;
     }
     if (!formData.divisionId) {
-      Alert.alert('Error', 'Debe seleccionar una división');
+      console.log('Error: Debe seleccionar una división');
       return false;
     }
     if (!formData.studentId) {
-      Alert.alert('Error', 'Debe seleccionar un estudiante');
+      console.log('Error: Debe seleccionar un estudiante');
       return false;
     }
     return true;
@@ -119,7 +118,7 @@ const PickupModal: React.FC<PickupModalProps> = ({
           telefono: formData.telefono,
           relacion: formData.relacion
         });
-        Alert.alert('Éxito', 'Persona actualizada correctamente');
+        console.log('Éxito: Persona actualizada correctamente');
       } else {
         await PickupService.createPickup({
           nombre: formData.nombre,
@@ -130,7 +129,7 @@ const PickupModal: React.FC<PickupModalProps> = ({
           divisionId: formData.divisionId,
           studentId: formData.studentId
         });
-        Alert.alert('Éxito', 'Persona agregada correctamente');
+        console.log('Éxito: Persona agregada correctamente');
       }
 
       onSuccess();

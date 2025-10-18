@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -71,7 +70,7 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
     const codeString = code.join('');
     
     if (codeString.length !== 6) {
-      Alert.alert('Error', 'Por favor ingresa el código completo de 6 dígitos');
+      console.log('Error: Por favor ingresa el código completo de 6 dígitos');
       return;
     }
 
@@ -119,19 +118,13 @@ const VerifyCodeScreen: React.FC<VerifyCodeScreenProps> = ({ email, onBack, onCo
         setCode(['', '', '', '', '', '']);
         setTimeLeft(600);
         setCanResend(false);
-        Alert.alert(
-          'Código Reenviado',
-          'Se ha enviado un nuevo código de recuperación a tu email.'
-        );
+        console.log('Código Reenviado: Se ha enviado un nuevo código de recuperación a tu email.');
       } else {
-        Alert.alert('Error', response.data.message || 'Error al reenviar el código');
+        console.log('Error:', response.data.message || 'Error al reenviar el código');
       }
     } catch (error: any) {
       console.error('Error reenviando código:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'Error al reenviar el código'
-      );
+      console.log('Error:', error.response?.data?.message || 'Error al reenviar el código');
     } finally {
       setLoading(false);
     }

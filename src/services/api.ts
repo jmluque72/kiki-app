@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_FULL_URL, API_TIMEOUT, DEFAULT_HEADERS } from '../config/apiConfig';
+import RefreshTokenService from './refreshTokenService';
 
 // Crear instancia de axios con configuración base
 export const apiClient = axios.create({
@@ -39,26 +40,66 @@ export const setGlobalLogout = (logoutFunction: () => Promise<void>) => {
   globalLogout = logoutFunction;
 };
 
-// Interceptor para manejar errores de respuesta
+// Interceptor para manejar errores de respuesta con refresh automático
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Verificar si el servidor envió un nuevo token
+    const newToken = response.headers['x-new-access-token'];
+    if (newToken) {
+      console.log('🔄 [API] Nuevo access token recibido del servidor');
+      setAuthToken(newToken);
+    }
+    return response;
+  },
   async (error) => {
-    if (error.response?.status === 401) {
-      // Token expirado o inválido
-      console.log('🔐 Token expirado o inválido - Redirigiendo al login');
+    const originalRequest = error.config;
+    
+    // Solo manejar refresh automático para errores 401 en endpoints autenticados
+    // No interferir con errores de login (que también devuelven 401)
+    if (error.response?.status === 401 && 
+        error.config?.url !== '/users/login' && 
+        error.config?.url !== '/auth/refresh' &&
+        !originalRequest._retry) {
       
-      // Limpiar el token actual
-      setAuthToken(null);
+      console.log('🔄 [API] Token expirado, intentando refresh automático...');
       
-      // Llamar a la función de logout global si está disponible
-      if (globalLogout) {
-        try {
-          await globalLogout();
-        } catch (logoutError) {
-          console.error('Error durante logout automático:', logoutError);
+      try {
+        // Marcar la request como retry para evitar loops
+        originalRequest._retry = true;
+        
+        // Intentar refresh del token
+        const newAccessToken = await RefreshTokenService.refreshAccessToken();
+        
+        if (newAccessToken) {
+          console.log('✅ [API] Token renovado exitosamente');
+          
+          // Actualizar el token en la request original
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          setAuthToken(newAccessToken);
+          
+          // Reintentar la request original
+          return apiClient(originalRequest);
+        }
+      } catch (refreshError) {
+        console.error('❌ [API] Error en refresh automático:', refreshError);
+        
+        // Si el refresh falla, hacer logout
+        console.log('🔐 [API] Refresh falló - Redirigiendo al login');
+        
+        // Limpiar el token actual
+        setAuthToken(null);
+        
+        // Llamar a la función de logout global si está disponible
+        if (globalLogout) {
+          try {
+            await globalLogout();
+          } catch (logoutError) {
+            console.error('Error durante logout automático:', logoutError);
+          }
         }
       }
     }
+    
     return Promise.reject(error);
   }
 );

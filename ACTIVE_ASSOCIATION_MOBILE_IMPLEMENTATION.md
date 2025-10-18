@@ -155,3 +155,13 @@ Se ha implementado completamente la integración del sistema de asociación acti
 - ✅ **Validación en backend** → El servidor valida todas las operaciones
 
 **🎉 La implementación está completa y lista para usar. El sistema de asociación activa ahora funciona perfectamente en la app móvil.**
+
+
+
+
+ Detalles del Keystore:
+Archivo: /Users/manuelluque/proyects/ki/KikiApp/android/app/keystore/kiki-release-key.keystore
+Alias: kiki-key-alias
+Contraseña del keystore: kiki123456
+Contraseña de la clave: kiki123456
+Validez: 10,000 días (aproximadamente 27 años)

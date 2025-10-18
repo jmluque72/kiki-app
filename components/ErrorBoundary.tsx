@@ -1,6 +1,8 @@
 import React, { Component, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { fonts } from '../src/config/fonts';
+import { logCriticalError, appLogger } from '../src/utils/logger';
+// import { reportError } from '../src/config/sentryConfig';
 
 interface Props {
   children: ReactNode;
@@ -24,11 +26,24 @@ class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Log del error para debugging
-    console.log('Error Boundary capturó un error:', error);
-    console.log('Error info:', errorInfo);
+    appLogger.crash('Error Boundary capturó un error', error, {
+      errorInfo,
+      componentStack: errorInfo.componentStack,
+      errorBoundary: 'MainErrorBoundary',
+    });
     
-    // Aquí podrías enviar el error a un servicio de logging
-    // logErrorToService(error, errorInfo);
+    // Reportar a Sentry (deshabilitado)
+    // reportError(error, {
+    //   errorInfo,
+    //   componentStack: errorInfo.componentStack,
+    //   errorBoundary: 'MainErrorBoundary',
+    // });
+    
+    // Log crítico para debugging
+    logCriticalError(error, 'ErrorBoundary', {
+      errorInfo,
+      componentStack: errorInfo.componentStack,
+    });
   }
 
   handleRetry = () => {

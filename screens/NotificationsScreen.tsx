@@ -6,10 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
 } from 'react-native';
 import CommonHeader from '../components/CommonHeader';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 
 const NotificationsScreen = ({ navigation }: { navigation: any }) => {
   const { user } = useAuth();
@@ -54,12 +53,12 @@ const NotificationsScreen = ({ navigation }: { navigation: any }) => {
 
   const handleSendNotification = () => {
     if (!newNotification.title.trim() || !newNotification.message.trim()) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      console.log('Error: Por favor completa todos los campos');
       return;
     }
 
     // Aquí iría la lógica para enviar la notificación
-    Alert.alert('Éxito', 'Notificación enviada correctamente');
+    console.log('Éxito: Notificación enviada correctamente');
     setNewNotification({ title: '', message: '', target: 'all' });
   };
 

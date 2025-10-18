@@ -14,7 +14,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import { fonts } from '../src/config/fonts';
 import { useLoading } from '../contexts/LoadingContext';
 import { useInstitution } from '../contexts/InstitutionContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContextHybrid';
 import CustomAlert from '../components/CustomAlert';
 import { useCustomAlert } from '../src/hooks/useCustomAlert';
 
@@ -45,8 +45,8 @@ const EyeIcon = ({ size = 20, isVisible = false }: { size?: number; isVisible?: 
 );
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('matilanzaco@solvoglobal.com');
+  const [password, setPassword] = useState('Matute123!');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { showLoading, hideLoading } = useLoading();

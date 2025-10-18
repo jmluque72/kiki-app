@@ -6,20 +6,25 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
-  Alert,
   StyleSheet,
   FlatList
 } from 'react-native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useInstitution } from '../contexts/InstitutionContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useStudents } from '../src/hooks/useStudents';
 import { API_FULL_URL } from '../src/config/apiConfig';
 import CommonHeader from '../components/CommonHeader';
+import withSideMenu from '../components/withSideMenu';
 import { useCustomAlert } from '../src/hooks/useCustomAlert';
 import CustomAlert from '../components/CustomAlert';
+import { processActivityImages, prepareImagesForUpload } from '../src/services/activityImageService';
+import { simpleProcessMultipleImages } from '../src/services/simpleImageProcessor';
+import { prepareVideosForUpload, filterValidVideos } from '../src/services/activityVideoService';
+import { useVideoConversion } from '../src/hooks/useVideoConversion';
+import VideoConversionModal from '../src/components/VideoConversionModal';
 
-const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
+const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications: () => void; onOpenMenu?: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   
   // Usar la primera institución si no hay ninguna seleccionada (igual que InicioScreen)
@@ -42,6 +47,19 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
   );
   
   const [selectedImages, setSelectedImages] = useState([]);
+  const [showVideoConversion, setShowVideoConversion] = useState(false);
+  const [videoConversionResult, setVideoConversionResult] = useState(null);
+  
+  // Hook para conversión de video
+  const {
+    isConverting,
+    conversionProgress,
+    convertVideo,
+    lastResult,
+    error: conversionError,
+    clearError
+  } = useVideoConversion();
+  
   const [formData, setFormData] = useState({
     titulo: '',
     participantes: '',
@@ -58,29 +76,13 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
   const { showSuccess, showError, isVisible, alertConfig } = useCustomAlert();
 
   const handleImagePicker = () => {
-    Alert.alert(
-      'Seleccionar Imagen',
-      '¿De dónde quieres seleccionar la imagen?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: 'Cámara',
-          onPress: () => openCamera(),
-        },
-        {
-          text: 'Galería',
-          onPress: () => openGallery(),
-        },
-      ]
-    );
+    // Abrir directamente la galería para seleccionar imagen
+    openGallery();
   };
 
   const openCamera = () => {
     const options = {
-      mediaType: 'photo',
+      mediaType: 'mixed', // Permite tanto fotos como videos
       includeBase64: false,
       maxHeight: 2000,
       maxWidth: 2000,
@@ -91,17 +93,30 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
         console.log('Usuario canceló la cámara');
       } else if (response.error) {
         console.log('Error de cámara:', response.error);
-        Alert.alert('Error', 'No se pudo abrir la cámara');
+        console.log('Error: No se pudo abrir la cámara');
       } else if (response.assets && response.assets[0]) {
-        const image = response.assets[0];
-        setSelectedImages(prev => [...prev, image]);
+        const asset = response.assets[0];
+        
+        // Validar tamaño de videos (máximo 10MB)
+        if (asset.type?.startsWith('video/')) {
+          const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
+          if (fileSizeMB > 10) {
+            console.warn(`Video es demasiado grande: ${fileSizeMB.toFixed(2)}MB (máximo 10MB)`);
+            return;
+          }
+          
+          // Mostrar modal de conversión para videos
+          setShowVideoConversion(true);
+        }
+        
+        setSelectedImages(prev => [...prev, asset]);
       }
     });
   };
 
   const openGallery = () => {
     const options = {
-      mediaType: 'photo',
+      mediaType: 'mixed', // Permite tanto imágenes como videos
       includeBase64: false,
       maxHeight: 2000,
       maxWidth: 2000,
@@ -113,9 +128,21 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
         console.log('Usuario canceló la galería');
       } else if (response.error) {
         console.log('Error de galería:', response.error);
-        Alert.alert('Error', 'No se pudo abrir la galería');
+        console.log('Error: No se pudo abrir la galería');
       } else if (response.assets) {
-        setSelectedImages(prev => [...prev, ...response.assets]);
+        // Validar tamaño de videos (máximo 10MB)
+        const validAssets = response.assets.filter(asset => {
+          if (asset.type?.startsWith('video/')) {
+            const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
+            if (fileSizeMB > 10) {
+              console.warn(`Video ${asset.fileName} es demasiado grande: ${fileSizeMB.toFixed(2)}MB (máximo 10MB)`);
+              return false;
+            }
+          }
+          return true;
+        });
+        
+        setSelectedImages(prev => [...prev, ...validAssets]);
       }
     });
   };
@@ -172,15 +199,15 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
 
   const validateForm = () => {
     if (!formData.titulo.trim()) {
-      Alert.alert('Error', 'El título de la actividad es obligatorio');
+      console.log('Error: El título de la actividad es obligatorio');
       return false;
     }
     if (selectedParticipantes.length === 0) {
-      Alert.alert('Error', 'Debes seleccionar al menos un participante');
+      console.log('Error: Debes seleccionar al menos un participante');
       return false;
     }
     if (selectedImages.length === 0) {
-      Alert.alert('Error', 'Debes seleccionar al menos una foto o video');
+      console.log('Error: Debes seleccionar al menos una foto o video');
       return false;
     }
     return true;
@@ -189,12 +216,171 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
   const uploadImages = async () => {
     const uploadedImages = [];
 
-    console.log('Iniciando upload de imágenes...');
-    console.log('Número de imágenes a subir:', selectedImages.length);
+    console.log('🖼️ [ACTIVIDAD] ===== INICIANDO UPLOAD DE IMÁGENES =====');
+    console.log('📸 [ACTIVIDAD] Número de imágenes a subir:', selectedImages.length);
+    console.log('🔍 [ACTIVIDAD] selectedImages:', selectedImages);
+
+    try {
+      // TEST DIRECTO: Verificar si el procesamiento funciona
+      console.log('🧪 [ACTIVIDAD] ===== TEST DIRECTO DE PROCESAMIENTO =====');
+      
+      if (selectedImages.length > 0) {
+        console.log('🧪 [ACTIVIDAD] Probando procesamiento con primera imagen...');
+        try {
+          const testResult = await simpleProcessMultipleImages([selectedImages[0].uri], 800, 85);
+          console.log('✅ [ACTIVIDAD] TEST EXITOSO:', testResult);
+          console.log('📦 [ACTIVIDAD] Tamaño procesado:', testResult[0].size, 'bytes');
+        } catch (testError) {
+          console.error('❌ [ACTIVIDAD] TEST FALLÓ:', testError);
+        }
+      }
+      
+      // Procesar todas las imágenes antes de subirlas
+      console.log('🖼️ [ACTIVIDAD] Procesando imágenes...');
+      console.log('📸 [ACTIVIDAD] Imágenes seleccionadas:', selectedImages.map(img => ({ uri: img.uri, fileSize: img.fileSize })));
+      
+      const imageUris = selectedImages.map(img => img.uri);
+      console.log('🔗 [ACTIVIDAD] URIs a procesar:', imageUris);
+      
+      console.log('🔄 [ACTIVIDAD] ===== PROCESAMIENTO PRINCIPAL =====');
+      let processedImages;
+      
+      // USAR SOLO EL PROCESADOR SIMPLIFICADO POR AHORA
+      console.log('🔄 [ACTIVIDAD] Usando simpleProcessMultipleImages directamente...');
+      processedImages = await simpleProcessMultipleImages(imageUris, 800, 85);
+      console.log('✅ [ACTIVIDAD] Procesamiento con simpleProcessMultipleImages exitoso');
+      
+      console.log('✅ [ACTIVIDAD] Imágenes procesadas:', processedImages.length);
+      console.log('🔍 [ACTIVIDAD] Verificando resultados del procesamiento...');
+      
+      // Verificar que las imágenes procesadas tienen las propiedades esperadas
+      processedImages.forEach((img, index) => {
+        console.log(`🔍 [ACTIVIDAD] Imagen ${index + 1} procesada:`, {
+          uri: img.uri,
+          width: img.width,
+          height: img.height,
+          size: img.size
+        });
+      });
+      console.log('📊 [ACTIVIDAD] Reducción de tamaño:');
+      processedImages.forEach((img, index) => {
+        const originalSize = selectedImages[index].fileSize || 0;
+        const processedSize = img.size;
+        const reduction = originalSize > 0 ? ((1 - processedSize / originalSize) * 100).toFixed(1) : 'N/A';
+        console.log(`📦 [ACTIVIDAD] Imagen ${index + 1}: ${originalSize} → ${processedSize} bytes (${reduction}% reducción)`);
+        console.log(`🔗 [ACTIVIDAD] URI procesada ${index + 1}:`, img.uri);
+      });
+
+      // Preparar las imágenes para subir
+      console.log('📦 [ACTIVIDAD] ===== PREPARANDO IMÁGENES PROCESADAS =====');
+      console.log('📦 [ACTIVIDAD] Usando imágenes procesadas:', processedImages.length);
+      const formDataArray = prepareProcessedImagesForUpload(processedImages);
+      console.log('📦 [ACTIVIDAD] FormDataArray preparado:', formDataArray.length, 'elementos');
+
+      // Subir cada imagen procesada
+      for (let i = 0; i < formDataArray.length; i++) {
+        try {
+          console.log(`📤 [ACTIVIDAD] Subiendo imagen ${i + 1}/${formDataArray.length}`);
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
+
+          const response = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+            method: 'POST',
+            body: formDataArray[i],
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          console.log('📡 [ACTIVIDAD] Respuesta del servidor:', response.status, response.statusText);
+
+          if (response.ok) {
+            const result = await response.json();
+            console.log('✅ [ACTIVIDAD] Imagen subida exitosamente:', result);
+            uploadedImages.push(result.imageKey);
+          } else {
+            const errorText = await response.text();
+            console.error('❌ [ACTIVIDAD] Error del servidor:', errorText);
+            throw new Error(`Error al subir imagen: ${response.status} ${response.statusText}`);
+          }
+        } catch (error) {
+          console.error('❌ [ACTIVIDAD] Error uploading image:', error);
+          throw new Error(`Error al subir imagen: ${error.message}`);
+        }
+      }
+
+      console.log('✅ [ACTIVIDAD] Todas las imágenes subidas exitosamente');
+      return uploadedImages;
+    } catch (error) {
+      console.error('❌ [ACTIVIDAD] Error procesando imágenes:', error);
+      console.error('❌ [ACTIVIDAD] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
+      // Si hay error en el procesamiento, intentar subir las imágenes originales como fallback
+      console.log('⚠️ [ACTIVIDAD] Fallback: subiendo imágenes originales sin procesar');
+      return await uploadOriginalImages();
+    }
+  };
+
+  // Función para preparar imágenes procesadas para subir
+  const prepareProcessedImagesForUpload = (processedImages: any[]) => {
+    const formDataArray = [];
+    
+    console.log('🔍 [ACTIVIDAD] ===== PREPARANDO FORM DATA =====');
+    console.log('🔍 [ACTIVIDAD] Imágenes procesadas recibidas:', processedImages);
+    
+    for (let i = 0; i < processedImages.length; i++) {
+      const image = processedImages[i];
+      const formData = new FormData();
+      
+      console.log(`🔍 [ACTIVIDAD] Procesando imagen ${i + 1}:`, {
+        uri: image.uri,
+        width: image.width,
+        height: image.height,
+        size: image.size
+      });
+      
+      // Obtener el nombre del archivo de la URI
+      const fileName = image.uri.split('/').pop() || `activity-image-${i}.jpg`;
+      
+      // Agregar la imagen al FormData
+      const imageFile = {
+        uri: image.uri,
+        type: 'image/jpeg',
+        name: fileName,
+      } as any;
+      
+      console.log(`🔍 [ACTIVIDAD] Archivo a subir ${i + 1}:`, {
+        uri: imageFile.uri,
+        type: imageFile.type,
+        name: imageFile.name
+      });
+      
+      formData.append('image', imageFile);
+      formDataArray.push(formData);
+      
+      console.log(`📦 [ACTIVIDAD] Preparada imagen ${i + 1}:`, fileName);
+    }
+    
+    console.log('📦 [ACTIVIDAD] Preparadas', formDataArray.length, 'imágenes para subir');
+    return formDataArray;
+  };
+
+  // Función fallback para subir imágenes originales sin procesar
+  const uploadOriginalImages = async () => {
+    const uploadedImages = [];
+    console.log('⚠️ [ACTIVIDAD] Subiendo imágenes originales sin procesar...');
 
     for (const image of selectedImages) {
       try {
-        console.log('Subiendo imagen:', image.uri);
+        console.log('📤 [ACTIVIDAD] Subiendo imagen original:', image.uri);
 
         const formData = new FormData();
         formData.append('image', {
@@ -203,10 +389,8 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
           name: image.fileName || 'image.jpg'
         });
 
-        console.log('URL de upload:', `${API_FULL_URL}/upload/s3/image`);
-
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
 
         const response = await fetch(`${API_FULL_URL}/upload/s3/image`, {
           method: 'POST',
@@ -219,25 +403,135 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
 
         clearTimeout(timeoutId);
 
-        console.log('Respuesta del servidor:', response.status, response.statusText);
-
         if (response.ok) {
           const result = await response.json();
-          console.log('Imagen subida exitosamente:', result);
+          console.log('✅ [ACTIVIDAD] Imagen original subida:', result);
           uploadedImages.push(result.imageKey);
         } else {
           const errorText = await response.text();
-          console.error('Error del servidor:', errorText);
+          console.error('❌ [ACTIVIDAD] Error subiendo imagen original:', errorText);
           throw new Error(`Error al subir imagen: ${response.status} ${response.statusText}`);
         }
       } catch (error) {
-        console.error('Error uploading image:', error);
+        console.error('❌ [ACTIVIDAD] Error uploading original image:', error);
         throw new Error(`Error al subir imagen: ${error.message}`);
       }
     }
 
-    console.log('Upload completado. URLs:', uploadedImages);
     return uploadedImages;
+  };
+
+  const uploadMedia = async () => {
+    const uploadedMedia = [];
+
+    console.log('📱 [ACTIVIDAD] ===== INICIANDO UPLOAD DE MEDIA =====');
+    console.log('📸 [ACTIVIDAD] Número de archivos a subir:', selectedImages.length);
+    console.log('🔍 [ACTIVIDAD] selectedImages:', selectedImages);
+
+    try {
+      // Separar imágenes y videos
+      const images = selectedImages.filter(media => !media.type?.startsWith('video/'));
+      const videos = selectedImages.filter(media => media.type?.startsWith('video/'));
+      
+      console.log('🖼️ [ACTIVIDAD] Imágenes encontradas:', images.length);
+      console.log('📹 [ACTIVIDAD] Videos encontrados:', videos.length);
+
+      // Procesar y subir imágenes
+      if (images.length > 0) {
+        console.log('🖼️ [ACTIVIDAD] ===== PROCESANDO IMÁGENES =====');
+        
+        const imageUris = images.map(img => img.uri);
+        const processedImages = await simpleProcessMultipleImages(imageUris, 800, 85);
+        const formDataArray = prepareImagesForUpload(processedImages);
+
+        for (let i = 0; i < formDataArray.length; i++) {
+          try {
+            console.log(`📤 [ACTIVIDAD] Subiendo imagen ${i + 1}/${formDataArray.length}`);
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+              method: 'POST',
+              body: formDataArray[i],
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ [ACTIVIDAD] Imagen subida exitosamente:', result);
+              uploadedMedia.push(result.imageKey);
+            } else {
+              const errorText = await response.text();
+              console.error('❌ [ACTIVIDAD] Error del servidor:', errorText);
+              throw new Error(`Error al subir imagen: ${response.status} ${response.statusText}`);
+            }
+          } catch (error) {
+            console.error('❌ [ACTIVIDAD] Error uploading image:', error);
+            throw new Error(`Error al subir imagen: ${error.message}`);
+          }
+        }
+      }
+
+      // Procesar y subir videos
+      if (videos.length > 0) {
+        console.log('📹 [ACTIVIDAD] ===== PROCESANDO VIDEOS =====');
+        
+        // Filtrar videos válidos por tamaño
+        const validVideos = filterValidVideos(videos, 10);
+        console.log('📹 [ACTIVIDAD] Videos válidos:', validVideos.length);
+        
+        if (validVideos.length !== videos.length) {
+          console.warn('⚠️ [ACTIVIDAD] Algunos videos fueron rechazados por tamaño');
+        }
+
+        const formDataArray = prepareVideosForUpload(validVideos);
+
+        for (let i = 0; i < formDataArray.length; i++) {
+          try {
+            console.log(`📤 [ACTIVIDAD] Subiendo video ${i + 1}/${formDataArray.length}`);
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos para videos
+
+            const response = await fetch(`${API_FULL_URL}/upload/s3/video`, {
+              method: 'POST',
+              body: formDataArray[i],
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ [ACTIVIDAD] Video subido exitosamente:', result);
+              uploadedMedia.push(result.videoKey);
+            } else {
+              const errorText = await response.text();
+              console.error('❌ [ACTIVIDAD] Error del servidor:', errorText);
+              throw new Error(`Error al subir video: ${response.status} ${response.statusText}`);
+            }
+          } catch (error) {
+            console.error('❌ [ACTIVIDAD] Error uploading video:', error);
+            throw new Error(`Error al subir video: ${error.message}`);
+          }
+        }
+      }
+
+      console.log('✅ [ACTIVIDAD] Todos los archivos subidos exitosamente');
+      return uploadedMedia;
+    } catch (error) {
+      console.error('❌ [ACTIVIDAD] Error procesando media:', error);
+      throw error;
+    }
   };
 
   const submitActivity = async () => {
@@ -250,20 +544,17 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
 
     if (!user) {
       console.log('No hay usuario autenticado');
-      Alert.alert('Error', 'No hay usuario autenticado');
       return;
     }
 
     if (!effectiveInstitution?.account._id) {
       console.log('No hay institución seleccionada');
-      Alert.alert('Error', 'No hay institución seleccionada');
       return;
     }
 
     // Verificar que se tenga una división seleccionada si el usuario tiene división
     if (effectiveInstitution.division && !effectiveInstitution.division._id) {
       console.log('No hay división seleccionada');
-      Alert.alert('Error', 'Debes seleccionar una división');
       return;
     }
 
@@ -275,17 +566,17 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
     setIsSubmitting(true);
 
     try {
-      console.log('Iniciando upload de imágenes...');
-      // 1. Subir imágenes
-      const uploadedImages = await uploadImages();
-      console.log('Imágenes subidas:', uploadedImages);
+      console.log('Iniciando upload de media...');
+      // 1. Subir media (imágenes y videos)
+      const uploadedMedia = await uploadMedia();
+      console.log('Media subida:', uploadedMedia);
 
       // 2. Enviar datos de la actividad
       const activityData = {
         titulo: formData.titulo,
         participantes: selectedParticipantes, // Array de IDs de estudiantes
         descripcion: formData.descripcion,
-        imagenes: uploadedImages,
+        imagenes: uploadedMedia,
         accountId: effectiveInstitution.account._id,
         divisionId: effectiveInstitution.division?._id,
         userId: user._id
@@ -358,6 +649,7 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
     <View style={styles.homeContainer}>
               <CommonHeader 
           onOpenNotifications={onOpenNotifications} 
+          onOpenMenu={onOpenMenu}
           activeStudent={getActiveStudent()}
         />
       
@@ -380,14 +672,23 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
           </TouchableOpacity>
         </View>
 
-        {/* Imágenes seleccionadas */}
+        {/* Media seleccionada (imágenes y videos) */}
         {selectedImages.length > 0 && (
           <View style={styles.selectedImagesContainer}>
-            <Text style={styles.selectedImagesTitle}>Imágenes seleccionadas:</Text>
+            <Text style={styles.selectedImagesTitle}>Media seleccionada:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {selectedImages.map((image, index) => (
+              {selectedImages.map((media, index) => (
                 <View key={index} style={styles.selectedImageContainer}>
-                  <Image source={{ uri: image.uri }} style={styles.selectedImage} />
+                  {media.type?.startsWith('video/') ? (
+                    <View style={styles.videoContainer}>
+                      <Image source={{ uri: media.uri }} style={styles.selectedImage} />
+                      <View style={styles.videoOverlay}>
+                        <Text style={styles.videoIcon}>▶️</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Image source={{ uri: media.uri }} style={styles.selectedImage} />
+                  )}
                   <TouchableOpacity
                     style={styles.removeImageButton}
                     onPress={() => setSelectedImages(prev => prev.filter((_, i) => i !== index))}
@@ -511,6 +812,23 @@ const ActividadScreen = ({ onOpenNotifications }: { onOpenNotifications: () => v
           onConfirm={alertConfig.onConfirm}
         />
       )}
+      
+      {/* Video Conversion Modal */}
+      <VideoConversionModal
+        visible={showVideoConversion}
+        isConverting={isConverting}
+        progress={conversionProgress}
+        result={lastResult}
+        error={conversionError}
+        onClose={() => {
+          setShowVideoConversion(false);
+          clearError();
+        }}
+        onRetry={() => {
+          // Implementar reintento de conversión si es necesario
+          clearError();
+        }}
+      />
     </View>
   );
 };
@@ -853,6 +1171,25 @@ const styles = StyleSheet.create({
     color: '#666666',
     fontStyle: 'italic',
   },
+  // Estilos para videos
+  videoContainer: {
+    position: 'relative',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  videoIcon: {
+    fontSize: 24,
+    color: '#FFFFFF',
+  },
 });
 
-export default ActividadScreen; 
+export default withSideMenu(ActividadScreen); 

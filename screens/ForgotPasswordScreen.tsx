@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -51,41 +50,20 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onC
       });
 
       if (response.data.success) {
-        Alert.alert(
-          'Código Enviado',
-          'Se ha enviado un código de recuperación a tu email. Revisa tu bandeja de entrada.',
-          [
-            {
-              text: 'OK',
-              onPress: () => onCodeSent(email.trim().toLowerCase())
-            }
-          ]
-        );
+        console.log('Código Enviado: Se ha enviado un código de recuperación a tu email. Revisa tu bandeja de entrada.');
+        onCodeSent(email.trim().toLowerCase());
       } else {
-        Alert.alert('Error', response.data.message || 'Error al enviar el código');
+        console.log('Error:', response.data.message || 'Error al enviar el código');
       }
     } catch (error: any) {
       console.error('Error en forgot password:', error);
       
       if (error.response?.status === 404) {
-        Alert.alert(
-          'Usuario no encontrado',
-          'No existe una cuenta con ese email. Verifica el email o regístrate.',
-          [
-            { text: 'Registrarse', onPress: onBack },
-            { text: 'Intentar de nuevo', style: 'cancel' }
-          ]
-        );
+        console.log('Usuario no encontrado: No existe una cuenta con ese email. Verifica el email o regístrate.');
       } else if (error.response?.status === 500) {
-        Alert.alert(
-          'Error del servidor',
-          'No se pudo enviar el email. Por favor, intenta nuevamente más tarde.'
-        );
+        console.log('Error del servidor: No se pudo enviar el email. Por favor, intenta nuevamente más tarde.');
       } else {
-        Alert.alert(
-          'Error',
-          error.response?.data?.message || 'Error al enviar el código de recuperación'
-        );
+        console.log('Error:', error.response?.data?.message || 'Error al enviar el código de recuperación');
       }
     } finally {
       setLoading(false);

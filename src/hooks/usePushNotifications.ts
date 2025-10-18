@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import PushNotificationService from '../services/pushNotificationService';
+import { useAuth } from '../../contexts/AuthContextHybrid';
+import AutoPushNotificationService from '../services/pushNotificationServiceAuto';
 import { NotificationService } from '../services/notificationService';
 
 export const usePushNotifications = () => {
@@ -26,27 +26,37 @@ export const usePushNotifications = () => {
     
     const initializePushNotifications = async () => {
       try {
-        // Inicializar el servicio
-        await PushNotificationService.initialize();
+        // Inicializar el servicio automático
+        await AutoPushNotificationService.initialize();
         setIsEnabled(true);
         
+        // Obtener información del servicio
+        const serviceInfo = AutoPushNotificationService.getServiceInfo();
+        console.log('🔔 [HOOK] Servicio inicializado:', serviceInfo);
+        
         // Obtener el token
-        const deviceToken = await PushNotificationService.getToken();
+        const deviceToken = await AutoPushNotificationService.getToken();
         console.log('🔔 [HOOK] Token obtenido:', deviceToken ? deviceToken.substring(0, 20) + '...' : 'null');
         
         if (deviceToken) {
           setToken(deviceToken);
-          // Registrar el token en el servidor
-          try {
-            const result = await NotificationService.registerPushToken(deviceToken, user._id);
-            console.log('✅ [HOOK] Token registrado exitosamente:', result);
-          } catch (error) {
-            console.error('❌ [HOOK] Error registrando token:', error);
-            setError('Error registrando token de notificaciones');
+          // Registrar el token en el servidor solo si no es fallback
+          if (!serviceInfo.useFallback) {
+            try {
+              const result = await NotificationService.registerPushToken(deviceToken, user._id);
+              console.log('✅ [HOOK] Token registrado exitosamente:', result);
+            } catch (error) {
+              console.error('❌ [HOOK] Error registrando token:', error);
+              setError('Error registrando token de notificaciones');
+            }
+          } else {
+            console.log('🔔 [HOOK] Modo fallback - no se registra token en servidor');
           }
         } else {
           console.log('🔔 [HOOK] No se pudo obtener token del dispositivo');
-          setError('No se pudo obtener token del dispositivo');
+          if (!serviceInfo.useFallback) {
+            setError('No se pudo obtener token del dispositivo');
+          }
         }
         
       } catch (error) {

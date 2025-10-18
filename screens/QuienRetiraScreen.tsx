@@ -2,215 +2,180 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
+  StyleSheet,
+  FlatList,
   ActivityIndicator,
-  RefreshControl
+  TextInput,
+  Modal,
+  Alert
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
-import { apiClient } from '../src/services/api';
-import { useApiErrorHandler } from '../components/ApiErrorHandler';
-import PickupService from '../src/services/pickupService';
-import PickupModal from '../components/PickupModal';
+import PickupService, { Pickup } from '../src/services/pickupService';
+import { toastService } from '../src/services/toastService';
 
-interface Pickup {
-  _id: string;
-  nombre: string;
-  apellido: string;
-  dni: string;
-  telefono?: string;
-  relacion: string;
-  division: {
-    _id: string;
-    nombre: string;
-  };
-  student: {
-    _id: string;
-    name: string;
-    apellido: string;
-  };
-  status: 'active' | 'inactive';
-  createdAt: string;
+interface QuienRetiraScreenProps {
+  onBack: () => void;
 }
 
-const QuienRetiraScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOpenNotifications }) => {
-  const { user } = useAuth();
-  const { selectedInstitution, userAssociations } = useInstitution();
-  const { showError } = useApiErrorHandler();
-  const [pickups, setPickups] = useState<Pickup[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedDivision, setSelectedDivision] = useState<string>('all');
-  const [selectedStudent, setSelectedStudent] = useState<string>('all');
-  const [divisions, setDivisions] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedPickup, setSelectedPickup] = useState<Pickup | null>(null);
-
-  // Verificar si el usuario tiene el rol correcto
-  const isFamilyAdmin = user?.role?.nombre === 'familyadmin';
+const QuienRetiraScreen: React.FC<QuienRetiraScreenProps> = ({ onBack }) => {
+  const { activeAssociation } = useAuth();
+  const { userAssociations } = useInstitution();
   
-  // Debug: Log del rol del usuario
-  console.log('🔍 [QuienRetiraScreen] Rol del usuario:', user?.role?.nombre);
-  console.log('🔍 [QuienRetiraScreen] isFamilyAdmin:', isFamilyAdmin);
-  console.log('🔍 [QuienRetiraScreen] Institución seleccionada:', selectedInstitution?.account?.nombre);
-  console.log('🔍 [QuienRetiraScreen] Asociaciones del usuario:', userAssociations.length);
+  const [personasAutorizadas, setPersonasAutorizadas] = useState<Pickup[]>([]);
+  const [loadingPickup, setLoadingPickup] = useState(false);
+  const [showAddPersonaModal, setShowAddPersonaModal] = useState(false);
+  
+  // Estado para formulario de nueva persona autorizada
+  const [newPersonaData, setNewPersonaData] = useState({
+    nombre: '',
+    apellido: '',
+    dni: ''
+  });
+
+  const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
 
   useEffect(() => {
-    if (isFamilyAdmin && selectedInstitution) {
-      loadDivisions();
-      loadPickups();
+    if (isFamilyAdmin) {
+      loadPickupPersons();
     }
-  }, [isFamilyAdmin, selectedInstitution]);
+  }, [isFamilyAdmin]);
 
-  const loadDivisions = async () => {
-    try {
-      // Obtener las divisiones de las asociaciones del usuario para la institución seleccionada
-      const userDivisions = userAssociations
-        .filter((assoc: any) => 
-          assoc.account._id === selectedInstitution?.account._id && 
-          assoc.division
-        )
-        .map((assoc: any) => assoc.division);
-      
-      setDivisions(userDivisions);
-      console.log('🔍 [QuienRetiraScreen] Divisiones cargadas:', userDivisions.length);
-    } catch (error) {
-      console.error('Error cargando divisiones:', error);
-    }
-  };
-
-  const loadStudents = async (divisionId: string) => {
-    if (divisionId === 'all') {
-      setStudents([]);
+  // Cargar personas autorizadas
+  const loadPickupPersons = async () => {
+    if (!isFamilyAdmin) {
+      console.log('⚠️ [loadPickupPersons] Usuario no es familyadmin');
       return;
     }
 
     try {
-      const studentsData = await PickupService.getStudentsByDivision(divisionId);
-      setStudents(studentsData);
-      console.log('🔍 [QuienRetiraScreen] Estudiantes cargados:', studentsData.length);
-    } catch (error) {
-      console.error('Error cargando estudiantes:', error);
-    }
-  };
-
-  const loadPickups = async () => {
-    try {
-      setLoading(true);
+      setLoadingPickup(true);
+      const userAssociation = userAssociations.find(assoc => assoc.account);
       
-      const params: any = {};
-      if (selectedDivision !== 'all') {
-        params.division = selectedDivision;
-      }
-      if (selectedStudent !== 'all') {
-        params.student = selectedStudent;
+      if (!userAssociation || !userAssociation.division?._id) {
+        console.log('⚠️ [loadPickupPersons] No se encontró división');
+        return;
       }
 
-      console.log('🔍 [QuienRetiraScreen] Cargando pickups con parámetros:', params);
-      const response = await PickupService.getPickups(params);
-      setPickups(response.pickups);
-      console.log('🔍 [QuienRetiraScreen] Pickups cargados:', response.pickups.length);
+      const pickups = await PickupService.getPickupsByDivision(userAssociation.division._id);
+      console.log('✅ [loadPickupPersons] Pickups recibidos del servidor:', pickups);
+      setPersonasAutorizadas(pickups);
+      console.log('✅ [loadPickupPersons] Personas autorizadas cargadas:', pickups.length);
     } catch (error: any) {
-      showError(error, 'Error al cargar quién retira');
+      console.error('❌ [loadPickupPersons] Error al cargar personas autorizadas:', error);
+      toastService.error('Error al cargar personas autorizadas');
     } finally {
-      setLoading(false);
+      setLoadingPickup(false);
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadPickups();
-    setRefreshing(false);
+  // Abrir modal para agregar persona autorizada
+  const handleOpenAddPersonaModal = () => {
+    setNewPersonaData({ nombre: '', apellido: '', dni: '' });
+    setShowAddPersonaModal(true);
   };
 
-  const handleDivisionChange = (divisionId: string) => {
-    setSelectedDivision(divisionId);
-    setSelectedStudent('all');
-    loadStudents(divisionId);
+  // Cerrar modal de agregar persona autorizada
+  const handleCloseAddPersonaModal = () => {
+    setShowAddPersonaModal(false);
+    setNewPersonaData({ nombre: '', apellido: '', dni: '' });
   };
 
-  const handleStudentChange = (studentId: string) => {
-    setSelectedStudent(studentId);
+  // Agregar persona autorizada
+  const handleAddPersona = async () => {
+    if (!newPersonaData.nombre.trim() || !newPersonaData.apellido.trim() || !newPersonaData.dni.trim()) {
+      toastService.error('Todos los campos son obligatorios');
+      return;
+    }
+
+    try {
+      setLoadingPickup(true);
+      
+      const userAssociation = userAssociations.find(assoc => assoc.account);
+      
+      if (!userAssociation) {
+        toastService.error('No tienes instituciones asociadas');
+        return;
+      }
+
+      const pickupData = {
+        nombre: newPersonaData.nombre.trim(),
+        apellido: newPersonaData.apellido.trim(),
+        dni: newPersonaData.dni.trim(),
+        divisionId: userAssociation.division?._id || ''
+      };
+
+      const newPickup = await PickupService.createPickup(pickupData);
+      console.log('✅ [handleAddPersona] Nueva persona creada:', newPickup);
+      
+      setPersonasAutorizadas(prev => {
+        const updated = [...prev, newPickup];
+        console.log('✅ [handleAddPersona] Lista actualizada:', updated.length, 'personas');
+        return updated;
+      });
+      handleCloseAddPersonaModal();
+      toastService.success('Persona autorizada agregada correctamente');
+    } catch (error: any) {
+      console.error('Error al crear pickup:', error);
+      
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        const errorMessages = error.response.data.errors.join('\n');
+        toastService.error(errorMessages);
+      } else if (error.response?.data?.message) {
+        toastService.error(error.response.data.message);
+      } else {
+        toastService.error(error.message || 'Error al agregar persona autorizada');
+      }
+    } finally {
+      setLoadingPickup(false);
+    }
   };
 
-  const addPickup = () => {
-    setSelectedPickup(null);
-    setModalVisible(true);
-  };
-
-  const editPickup = (pickup: Pickup) => {
-    setSelectedPickup(pickup);
-    setModalVisible(true);
-  };
-
-  const handleModalSuccess = () => {
-    loadPickups();
-  };
-
-  const handleModalClose = () => {
-    setModalVisible(false);
-    setSelectedPickup(null);
-  };
-
-  const deletePickup = (pickup: Pickup) => {
+  // Eliminar persona autorizada
+  const handleDeletePersona = async (id: string) => {
     Alert.alert(
-      'Eliminar Quien Retira',
-      `¿Estás seguro de que deseas eliminar a ${pickup.nombre} ${pickup.apellido}?`,
+      'Eliminar persona autorizada',
+      '¿Estás seguro de que quieres eliminar esta persona autorizada?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Eliminar', style: 'destructive', onPress: async () => {
-          try {
-            await PickupService.deletePickup(pickup._id);
-            Alert.alert('Éxito', 'Persona eliminada correctamente');
-            loadPickups();
-          } catch (error: any) {
-            showError(error, 'Error al eliminar');
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoadingPickup(true);
+              await PickupService.deletePickup(id);
+              setPersonasAutorizadas(prev => prev.filter(p => p._id !== id));
+              toastService.success('Persona autorizada eliminada correctamente');
+            } catch (error: any) {
+              console.error('Error al eliminar persona autorizada:', error);
+              toastService.error(error.message || 'Error al eliminar persona autorizada');
+            } finally {
+              setLoadingPickup(false);
+            }
           }
-        }}
+        }
       ]
     );
   };
 
-  // Si el usuario no es familyadmin, mostrar mensaje de acceso denegado
   if (!isFamilyAdmin) {
     return (
       <View style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Quien Retira</Text>
-          <TouchableOpacity onPress={onOpenNotifications} style={styles.notificationButton}>
-            <Text style={styles.notificationIcon}>🔔</Text>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Quien Retira</Text>
         </View>
-        <View style={styles.accessDeniedContainer}>
-          <Text style={styles.accessDeniedIcon}>🚫</Text>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
-          <Text style={styles.accessDeniedMessage}>
-            Solo los administradores familiares pueden acceder a esta sección.
-          </Text>
-        </View>
-      </View>
-    );
-  }
 
-  // Si no hay institución seleccionada, mostrar mensaje
-  if (!selectedInstitution) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Quien Retira</Text>
-          <TouchableOpacity onPress={onOpenNotifications} style={styles.notificationButton}>
-            <Text style={styles.notificationIcon}>🔔</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.accessDeniedContainer}>
-          <Text style={styles.accessDeniedIcon}>🏫</Text>
-          <Text style={styles.accessDeniedTitle}>Institución Requerida</Text>
-          <Text style={styles.accessDeniedMessage}>
-            Debes seleccionar una institución para acceder a esta sección.
+        {/* Content */}
+        <View style={styles.content}>
+          <Text style={styles.emptyText}>
+            Solo los padres pueden gestionar personas autorizadas
           </Text>
         </View>
       </View>
@@ -221,174 +186,129 @@ const QuienRetiraScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOp
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Quien Retira</Text>
-        <TouchableOpacity onPress={onOpenNotifications} style={styles.notificationButton}>
-          <Text style={styles.notificationIcon}>🔔</Text>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Información de la institución */}
-      <View style={styles.institutionInfo}>
-        <Text style={styles.institutionName}>{selectedInstitution.account.nombre}</Text>
-      </View>
-
-      {/* Filtros */}
-      <View style={styles.filtersContainer}>
-        <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>División:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-            <TouchableOpacity
-              style={[styles.filterChip, selectedDivision === 'all' && styles.filterChipActive]}
-              onPress={() => handleDivisionChange('all')}
-            >
-              <Text style={[styles.filterChipText, selectedDivision === 'all' && styles.filterChipTextActive]}>
-                Todas
-              </Text>
-            </TouchableOpacity>
-            {divisions.map((division) => (
-              <TouchableOpacity
-                key={division._id}
-                style={[styles.filterChip, selectedDivision === division._id && styles.filterChipActive]}
-                onPress={() => handleDivisionChange(division._id)}
-              >
-                <Text style={[styles.filterChipText, selectedDivision === division._id && styles.filterChipTextActive]}>
-                  {division.nombre}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+        <Text style={styles.headerTitle}>Quien Retira</Text>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={handleOpenAddPersonaModal} style={styles.addButton}>
+            <Text style={styles.addButtonText}>+ Agregar</Text>
+          </TouchableOpacity>
         </View>
-
-        {selectedDivision !== 'all' && (
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Estudiante:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-              <TouchableOpacity
-                style={[styles.filterChip, selectedStudent === 'all' && styles.filterChipActive]}
-                onPress={() => handleStudentChange('all')}
-              >
-                <Text style={[styles.filterChipText, selectedStudent === 'all' && styles.filterChipTextActive]}>
-                  Todos
-                </Text>
-              </TouchableOpacity>
-              {students.map((student) => (
-                <TouchableOpacity
-                  key={student._id}
-                  style={[styles.filterChip, selectedStudent === student._id && styles.filterChipActive]}
-                  onPress={() => handleStudentChange(student._id)}
-                >
-                  <Text style={[styles.filterChipText, selectedStudent === student._id && styles.filterChipTextActive]}>
-                    {student.name} {student.apellido}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
       </View>
 
-      {/* Botón Agregar */}
-      <TouchableOpacity style={styles.addButton} onPress={addPickup}>
-        <Text style={styles.addButtonText}>+ Agregar Quien Retira</Text>
-      </TouchableOpacity>
+      {/* Content */}
+      <View style={styles.content}>
+        <Text style={styles.subtitle}>
+          Personas autorizadas para retirar al estudiante
+        </Text>
 
-      {/* Lista de Quien Retira */}
-      <ScrollView
-        style={styles.pickupsList}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {loading ? (
+        {loadingPickup ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0E5FCE" />
-            <Text style={styles.loadingText}>Cargando...</Text>
+            <Text style={styles.loadingText}>Cargando personas autorizadas...</Text>
           </View>
-        ) : pickups.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyTitle}>No hay personas registradas</Text>
-            <Text style={styles.emptyMessage}>
-              No se encontraron personas autorizadas para retirar estudiantes.
-            </Text>
-          </View>
+        ) : personasAutorizadas.length === 0 ? (
+          <Text style={styles.emptyText}>No hay personas autorizadas</Text>
         ) : (
-          pickups.map((pickup) => (
-            <View key={pickup._id} style={styles.pickupCard}>
-              <View style={styles.pickupHeader}>
-                <Text style={styles.pickupName}>
-                  {pickup.nombre} {pickup.apellido}
-                </Text>
-                <View style={styles.pickupActions}>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => editPickup(pickup)}
-                  >
-                    <Text style={styles.actionButtonText}>✏️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => deletePickup(pickup)}
-                  >
-                    <Text style={styles.actionButtonText}>🗑️</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              <View style={styles.pickupDetails}>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>DNI:</Text>
-                  <Text style={styles.detailValue}>{pickup.dni}</Text>
-                </View>
-                
-                {pickup.telefono && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Teléfono:</Text>
-                    <Text style={styles.detailValue}>{pickup.telefono}</Text>
-                  </View>
-                )}
-                
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Relación:</Text>
-                  <Text style={styles.detailValue}>{pickup.relacion}</Text>
-                </View>
-                
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Estudiante:</Text>
-                  <Text style={styles.detailValue}>
-                    {pickup.student.name} {pickup.student.apellido}
+          <FlatList
+            data={personasAutorizadas}
+            keyExtractor={(item) => item._id}
+            renderItem={({ item }) => (
+              <View style={styles.personaItem}>
+                <View style={styles.personaInfo}>
+                  <Text style={styles.personaNombre}>
+                    {item.nombre} {item.apellido}
                   </Text>
+                  <Text style={styles.personaDni}>DNI: {item.dni}</Text>
                 </View>
-                
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>División:</Text>
-                  <Text style={styles.detailValue}>{pickup.division.nombre}</Text>
-                </View>
+                <TouchableOpacity
+                  onPress={() => handleDeletePersona(item._id)}
+                  style={styles.deleteButton}
+                >
+                  <Text style={styles.deleteButtonText}>✕</Text>
+                </TouchableOpacity>
               </View>
-              
-              <View style={styles.pickupStatus}>
-                <View style={[
-                  styles.statusIndicator,
-                  pickup.status === 'active' ? styles.statusActive : styles.statusInactive
-                ]} />
-                <Text style={styles.statusText}>
-                  {pickup.status === 'active' ? 'Activo' : 'Inactivo'}
-                </Text>
-              </View>
-            </View>
-          ))
+            )}
+          />
         )}
-      </ScrollView>
+      </View>
 
-      {/* Modal para agregar/editar */}
-      <PickupModal
-        visible={modalVisible}
-        onClose={handleModalClose}
-        onSuccess={handleModalSuccess}
-        pickup={selectedPickup}
-        divisions={divisions}
-        students={students}
-      />
+      {/* Modal para agregar persona autorizada */}
+      <Modal
+        visible={showAddPersonaModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleCloseAddPersonaModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Agregar Persona Autorizada</Text>
+              <TouchableOpacity
+                onPress={handleCloseAddPersonaModal}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Nombre *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newPersonaData.nombre}
+                  onChangeText={(text) =>
+                    setNewPersonaData(prev => ({ ...prev, nombre: text }))
+                  }
+                  placeholder="Ingrese el nombre"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Apellido *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newPersonaData.apellido}
+                  onChangeText={(text) =>
+                    setNewPersonaData(prev => ({ ...prev, apellido: text }))
+                  }
+                  placeholder="Ingrese el apellido"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>DNI *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newPersonaData.dni}
+                  onChangeText={(text) =>
+                    setNewPersonaData(prev => ({ ...prev, dni: text }))
+                  }
+                  placeholder="Ingrese el DNI"
+                  keyboardType="numeric"
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                onPress={handleCloseAddPersonaModal}
+                style={[styles.modalButton, styles.cancelButton]}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleAddPersona}
+                style={[styles.modalButton, styles.saveButton]}
+              >
+                <Text style={styles.saveButtonText}>Agregar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -396,224 +316,202 @@ const QuienRetiraScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOp
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    justifyContent: 'space-between',
     paddingTop: 60,
     paddingBottom: 20,
+    paddingHorizontal: 20,
     backgroundColor: '#0E5FCE',
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  notificationButton: {
-    padding: 8,
-  },
-  notificationIcon: {
-    fontSize: 24,
-  },
-  institutionInfo: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  institutionName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  accessDeniedContainer: {
-    flex: 1,
+  backButton: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
   },
-  accessDeniedIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  accessDeniedTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  accessDeniedMessage: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  filtersContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  filterRow: {
-    marginBottom: 10,
-  },
-  filterLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  filterScroll: {
-    flexDirection: 'row',
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F0F0F0',
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  filterChipActive: {
-    backgroundColor: '#0E5FCE',
-  },
-  filterChipText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  filterChipTextActive: {
+  backButtonText: {
+    fontSize: 30,
     color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   addButton: {
-    backgroundColor: '#FF8C42',
-    marginHorizontal: 20,
-    marginVertical: 15,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
   },
   addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#0E5FCE',
   },
-  pickupsList: {
+  content: {
     flex: 1,
-    paddingHorizontal: 20,
+    padding: 20,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 20,
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 50,
   },
   loadingText: {
-    marginTop: 10,
     fontSize: 16,
-    color: '#666',
+    color: '#666666',
+    marginTop: 10,
   },
-  emptyContainer: {
+  emptyText: {
+    fontSize: 16,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: 50,
+  },
+  personaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 12,
+  },
+  personaInfo: {
     flex: 1,
+  },
+  personaNombre: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 5,
+  },
+  personaDni: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FF6B6B',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 20,
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
   },
-  emptyMessage: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  pickupCard: {
+  modalContainer: {
+    width: '90%',
+    maxHeight: '80%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 20,
+    overflow: 'hidden',
   },
-  pickupHeader: {
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    padding: 20,
+    backgroundColor: '#0E5FCE',
   },
-  pickupName: {
+  modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
-    flex: 1,
+    color: '#FFFFFF',
   },
-  pickupActions: {
-    flexDirection: 'row',
-  },
-  actionButton: {
-    padding: 8,
-    marginLeft: 8,
-    borderRadius: 6,
-    backgroundColor: '#F0F0F0',
-  },
-  deleteButton: {
-    backgroundColor: '#FFE6E6',
-  },
-  actionButtonText: {
-    fontSize: 16,
-  },
-  pickupDetails: {
-    marginBottom: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#666',
-    width: 80,
-    fontWeight: '500',
-  },
-  detailValue: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
-  },
-  pickupStatus: {
-    flexDirection: 'row',
+  modalCloseButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
+  modalCloseButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0E5FCE',
   },
-  statusActive: {
-    backgroundColor: '#4CAF50',
+  modalContent: {
+    padding: 20,
   },
-  statusInactive: {
-    backgroundColor: '#F44336',
+  inputGroup: {
+    marginBottom: 20,
   },
-  statusText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#333333',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#E0E0E0',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666666',
+    textAlign: 'center',
+  },
+  saveButton: {
+    backgroundColor: '#0E5FCE',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });
 

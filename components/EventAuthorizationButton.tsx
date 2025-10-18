@@ -4,10 +4,9 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
 import EventAuthorizationService from '../src/services/eventAuthorizationService';
 
@@ -30,8 +29,10 @@ const EventAuthorizationButton: React.FC<EventAuthorizationButtonProps> = ({
 
   const activeStudent = getActiveStudent();
 
-  // Verificar si el usuario puede autorizar (familyadmin con estudiante activo)
-  const canAuthorize = user?.role?.nombre === 'familyadmin' && activeStudent && requiereAutorizacion;
+  // Verificar si el usuario puede autorizar (solo familyadmin, NO familyviewer)
+  const canAuthorize = user?.role?.nombre === 'familyadmin' && 
+                      activeStudent && 
+                      requiereAutorizacion;
 
   const checkAuthorization = async () => {
     if (!canAuthorize || !activeStudent) {
@@ -64,21 +65,8 @@ const EventAuthorizationButton: React.FC<EventAuthorizationButtonProps> = ({
     const action = isCurrentlyAuthorized ? 'revocar' : 'autorizar';
     const actionText = isCurrentlyAuthorized ? 'Revocar autorización' : 'Autorizar participación';
 
-    Alert.alert(
-      actionText,
-      `¿Estás seguro que deseas ${action} la participación de ${activeStudent.nombre} ${activeStudent.apellido} en el evento "${eventTitle}"?`,
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: actionText,
-          style: isCurrentlyAuthorized ? 'destructive' : 'default',
-          onPress: () => performAuthorization(!isCurrentlyAuthorized),
-        },
-      ]
-    );
+    console.log(`${actionText}: ¿Estás seguro que deseas ${action} la participación de ${activeStudent.nombre} ${activeStudent.apellido} en el evento "${eventTitle}"?`);
+    performAuthorization(!isCurrentlyAuthorized);
   };
 
   const performAuthorization = async (autorizado: boolean) => {
@@ -95,18 +83,13 @@ const EventAuthorizationButton: React.FC<EventAuthorizationButtonProps> = ({
       setAuthorization(newAuth);
       console.log('✅ [AUTHORIZATION BUTTON] Autorización actualizada:', newAuth);
       
-      Alert.alert(
-        'Éxito',
-        autorizado 
+      console.log('Éxito:', autorizado 
           ? 'Has autorizado la participación en el evento'
           : 'Has revocado la autorización para el evento'
       );
     } catch (error: any) {
       console.error('❌ [AUTHORIZATION BUTTON] Error autorizando:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'Error al procesar la autorización'
-      );
+      console.log('Error:', error.response?.data?.message || 'Error al procesar la autorización');
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,13 @@
-import PushNotification from 'react-native-push-notification';
 import { Platform, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Importación segura de PushNotification para evitar errores de NativeEventEmitter
+let PushNotification: any = null;
+try {
+  PushNotification = require('react-native-push-notification');
+} catch (error) {
+  console.warn('⚠️ react-native-push-notification no disponible:', error);
+}
 
 export interface PushNotificationData {
   title: string;
@@ -32,72 +39,91 @@ class PushNotificationService {
       return;
     }
 
+    // Verificar si PushNotification está disponible
+    if (!PushNotification) {
+      console.warn('⚠️ PushNotification no disponible, saltando inicialización');
+      this.isInitialized = true;
+      return;
+    }
+
     console.log('🔔 Inicializando PushNotificationService por primera vez...');
 
-    // Solicitar permisos primero
-    PushNotification.requestPermissions().then((permissions) => {
-      console.log('🔔 [INIT] Permisos solicitados:', permissions);
-      if (permissions.alert && permissions.badge && permissions.sound) {
-        console.log('🔔 [INIT] Permisos concedidos, configurando...');
-      } else {
-        console.log('🔔 [INIT] Permisos NO concedidos:', permissions);
-      }
-    });
-
-    PushNotification.configure({
-      // (required) Called when a remote or local notification is opened or received
-
-      onNotification: function(notification: any) {
-        console.log('🔔 Push notification received:', notification);
-        
-        // Manejar la notificación cuando la app está en primer plano
-        if (notification.userInteraction) {
-          console.log('🔔 User interacted with notification:', notification);
+    try {
+      // Solicitar permisos primero
+      PushNotification.requestPermissions().then((permissions) => {
+        console.log('🔔 [INIT] Permisos solicitados:', permissions);
+        if (permissions.alert && permissions.badge && permissions.sound) {
+          console.log('🔔 [INIT] Permisos concedidos, configurando...');
+        } else {
+          console.log('🔔 [INIT] Permisos NO concedidos:', permissions);
         }
-      },
-      // (optional) Called when Token is generated (iOS and Android)
-      onRegister: function(token: any) {
-        console.log('🔔 [ONREGISTER] Push notification token registered:', token);
-        console.log('🔔 [ONREGISTER] Token object:', JSON.stringify(token, null, 2));
-        console.log('🔔 [ONREGISTER] Token.token:', token.token);
-        console.log('🔔 [ONREGISTER] Instancia actual:', PushNotificationService.instance);
-        
-        // Guardar el token en la instancia
-        PushNotificationService.instance.deviceToken = token.token;
-        console.log('🔔 [ONREGISTER] Token guardado en deviceToken:', PushNotificationService.instance.deviceToken ? PushNotificationService.instance.deviceToken.substring(0, 20) + '...' : 'null');
-        
-        // También guardar en AsyncStorage para persistencia
-        if (token.token) {
-          AsyncStorage.setItem('push_token', token.token).then(() => {
-            console.log('🔔 [ONREGISTER] Token guardado en AsyncStorage:', token.token.substring(0, 20) + '...');
-          }).catch((error) => {
-            console.error('🔔 [ONREGISTER] Error guardando token en AsyncStorage:', error);
-          });
-        }
-      },
+      });
+    } catch (error) {
+      console.error('❌ Error solicitando permisos:', error);
+      this.isInitialized = true;
+      return;
+    }
 
-      // (optional) Called when the user fails to register for remote notifications.
-      onRegistrationError: function(err: any) {
-        console.error('🔔 Push notification registration error:', err);
-      },
+    try {
+      PushNotification.configure({
+        // (required) Called when a remote or local notification is opened or received
 
-      // IOS ONLY (optional): default: all - Permissions to register.
-      permissions: {
-        alert: true,
-        badge: true,
-        sound: true,
-      },
+        onNotification: function(notification: any) {
+          console.log('🔔 Push notification received:', notification);
+          
+          // Manejar la notificación cuando la app está en primer plano
+          if (notification.userInteraction) {
+            console.log('🔔 User interacted with notification:', notification);
+          }
+        },
+        // (optional) Called when Token is generated (iOS and Android)
+        onRegister: function(token: any) {
+          console.log('🔔 [ONREGISTER] Push notification token registered:', token);
+          console.log('🔔 [ONREGISTER] Token object:', JSON.stringify(token, null, 2));
+          console.log('🔔 [ONREGISTER] Token.token:', token.token);
+          console.log('🔔 [ONREGISTER] Instancia actual:', PushNotificationService.instance);
+          
+          // Guardar el token en la instancia
+          PushNotificationService.instance.deviceToken = token.token;
+          console.log('🔔 [ONREGISTER] Token guardado en deviceToken:', PushNotificationService.instance.deviceToken ? PushNotificationService.instance.deviceToken.substring(0, 20) + '...' : 'null');
+          
+          // También guardar en AsyncStorage para persistencia
+          if (token.token) {
+            AsyncStorage.setItem('push_token', token.token).then(() => {
+              console.log('🔔 [ONREGISTER] Token guardado en AsyncStorage:', token.token.substring(0, 20) + '...');
+            }).catch((error) => {
+              console.error('🔔 [ONREGISTER] Error guardando token en AsyncStorage:', error);
+            });
+          }
+        },
 
-      // Should the initial notification be popped automatically
-      popInitialNotification: true,
+        // (optional) Called when the user fails to register for remote notifications.
+        onRegistrationError: function(err: any) {
+          console.error('🔔 Push notification registration error:', err);
+        },
 
-      /**
-       * (optional) default: true
-       * - Specified if permissions (ios) and token (android and ios) will requested or not,
-       * - if not, you must call PushNotificationsHandler.requestPermissions() later
-       */
-      requestPermissions: true,
-    });
+        // IOS ONLY (optional): default: all - Permissions to register.
+        permissions: {
+          alert: true,
+          badge: true,
+          sound: true,
+        },
+
+        // Should the initial notification be popped automatically
+        popInitialNotification: true,
+
+        /**
+         * (optional) default: true
+         * - Specified if permissions (ios) and token (android and ios) will requested or not,
+         * - if not, you must call PushNotificationsHandler.requestPermissions() later
+         */
+        requestPermissions: true,
+      });
+    } catch (error) {
+      console.error('❌ Error configurando PushNotification:', error);
+      this.isInitialized = true;
+      return;
+    }
 
     this.isInitialized = true;
     console.log('🔔 [INIT] PushNotificationService inicializado correctamente');
@@ -213,7 +239,6 @@ class PushNotificationService {
     try {
       // Para iOS, intentar obtener el token desde AsyncStorage que puede acceder a UserDefaults
       const token = await AsyncStorage.getItem('push_token');
-      alert(token);
       if (token) {
         console.log('🔔 [USERDEFAULTS] Token obtenido desde AsyncStorage/UserDefaults:', token.substring(0, 20) + '...');
         return token;
@@ -268,6 +293,11 @@ class PushNotificationService {
    * Solicita permisos para notificaciones
    */
   async requestPermissions(): Promise<boolean> {
+    if (!PushNotification) {
+      console.warn('⚠️ PushNotification no disponible para solicitar permisos');
+      return false;
+    }
+
     try {
       return new Promise((resolve) => {
         PushNotification.requestPermissions().then((permissions: any) => {
@@ -285,18 +315,36 @@ class PushNotificationService {
    * Envía una notificación local
    */
   sendLocalNotification(data: PushNotificationData) {
-    PushNotification.localNotification({
-      title: data.title,
-      message: data.message,
-      data: data.data,
-    });
+    if (!PushNotification) {
+      console.warn('⚠️ PushNotification no disponible para enviar notificación local');
+      return;
+    }
+
+    try {
+      PushNotification.localNotification({
+        title: data.title,
+        message: data.message,
+        data: data.data,
+      });
+    } catch (error) {
+      console.error('❌ Error enviando notificación local:', error);
+    }
   }
 
   /**
    * Abre la configuración de notificaciones
    */
   openNotificationSettings() {
-    PushNotification.openSettings();
+    if (!PushNotification) {
+      console.warn('⚠️ PushNotification no disponible para abrir configuración');
+      return;
+    }
+
+    try {
+      PushNotification.openSettings();
+    } catch (error) {
+      console.error('❌ Error abriendo configuración de notificaciones:', error);
+    }
   }
 }
 

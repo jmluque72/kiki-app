@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -114,18 +113,10 @@ const ResetPasswordScreen: React.FC<ResetPasswordScreenProps> = ({
       });
 
       if (response.data.success) {
-        Alert.alert(
-          '¡Contraseña Actualizada!',
-          'Tu contraseña ha sido actualizada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.',
-          [
-            {
-              text: 'OK',
-              onPress: onPasswordReset
-            }
-          ]
-        );
+        console.log('¡Contraseña Actualizada! Tu contraseña ha sido actualizada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.');
+        onPasswordReset();
       } else {
-        Alert.alert('Error', response.data.message || 'Error al actualizar la contraseña');
+        console.log('Error:', response.data.message || 'Error al actualizar la contraseña');
       }
     } catch (error: any) {
       console.error('Error reseteando contraseña:', error);

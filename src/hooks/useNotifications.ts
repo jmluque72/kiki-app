@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NotificationService, Notification, Recipient, CreateNotificationRequest } from '../services/notificationService';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContextHybrid';
 import { useInstitution } from '../../contexts/InstitutionContext';
 
 export interface UseNotificationsReturn {
@@ -18,7 +18,7 @@ export interface UseNotificationsReturn {
 }
 
 export const useNotifications = (): UseNotificationsReturn => {
-  const { user } = useAuth();
+  const { user, activeAssociation } = useAuth();
   const { selectedInstitution } = useInstitution();
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -42,20 +42,22 @@ export const useNotifications = (): UseNotificationsReturn => {
         return;
       }
 
-      const isCoordinador = user.role?.nombre === 'coordinador';
+      // Determinar rol efectivo priorizando la asociación activa
+      const effectiveRole = activeAssociation?.role?.nombre || user.role?.nombre;
+      const isCoordinador = effectiveRole === 'coordinador';
       
       const data = await NotificationService.getNotifications({
         limit: 50,
         unreadOnly: false,
         accountId: selectedInstitution.account._id,
         divisionId: selectedInstitution.division?._id,
-        userRole: user.role?.nombre,
+        userRole: effectiveRole,
         userId: user._id,
         isCoordinador
       });
       console.log('🔔 Notificaciones recibidas del servidor:', data);
       console.log('🔔 Cantidad de notificaciones:', data?.length || 0);
-      console.log('🔔 Usuario actual:', user.name, 'Rol:', user.role?.nombre);
+      console.log('🔔 Usuario actual:', user.name, 'Rol base:', user.role?.nombre, 'Rol activo:', activeAssociation?.role?.nombre);
       console.log('🔔 Institución:', selectedInstitution.account.nombre);
       console.log('🔔 División:', selectedInstitution.division?.nombre || 'Sin división');
       
@@ -66,7 +68,7 @@ export const useNotifications = (): UseNotificationsReturn => {
     } finally {
       setLoading(false);
     }
-  }, [user, selectedInstitution]);
+  }, [user, activeAssociation, selectedInstitution]);
 
   const loadRecipients = useCallback(async (accountId: string, divisionId?: string) => {
     try {

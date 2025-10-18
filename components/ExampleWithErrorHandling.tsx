@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Button, Alert } from 'react-native';
+import { View, Text, Button } from 'react-native';
 import { useApiErrorHandler } from './ApiErrorHandler';
 import EventService from '../src/services/eventService';
 
@@ -37,7 +37,7 @@ export const ExampleWithErrorHandling: React.FC = () => {
         hora: '18:00'
       });
       
-      Alert.alert('Éxito', 'Evento creado correctamente');
+      console.log('Éxito: Evento creado correctamente');
     } catch (error: any) {
       // El interceptor maneja automáticamente los errores 401
       showError(error, 'Error al crear evento');

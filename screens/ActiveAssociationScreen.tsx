@@ -10,7 +10,7 @@ import {
   Image
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { ActiveAssociationService, AvailableAssociation } from '../src/services/activeAssociationService';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 

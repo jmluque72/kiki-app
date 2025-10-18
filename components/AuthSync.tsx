@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContextHybrid';
 import { useInstitution } from '../contexts/InstitutionContext';
 
 interface AuthSyncProps {

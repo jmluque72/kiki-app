@@ -5,10 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Image,
-  Alert
+  Image
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 
@@ -16,69 +15,51 @@ interface SideMenuProps {
   navigation: any;
   onClose: () => void;
   onOpenActiveAssociation?: () => void;
+  onOpenAssociations?: () => void;
+  onOpenQuienRetira?: () => void;
+  onOpenAcercaDe?: () => void;
+  onOpenTerminosCondiciones?: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation }) => {
-  const { user, logout, associations } = useAuth();
+const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation, onOpenAssociations, onOpenQuienRetira, onOpenAcercaDe, onOpenTerminosCondiciones }) => {
+  const { user, logout, associations, activeAssociation } = useAuth();
   const { selectedInstitution } = useInstitution();
 
+  // Verificar si el usuario es familyadmin (padre)
+  const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
+
   const menuItems = [
-    {
-      id: 'profile',
-      title: 'Perfil',
+    // Solo mostrar "Quien Retira" para padres (familyadmin)
+    ...(isFamilyAdmin ? [{
+      id: 'quienRetira',
+      title: 'Quien Retira',
       onPress: () => {
         onClose();
-        // Navegar a la pantalla de perfil
+        onOpenQuienRetira?.();
       }
-    },
-    {
-      id: 'notifications',
-      title: 'Notificaciones',
-      onPress: () => {
-        onClose();
-        // Navegar a notificaciones
-      }
-    },
+    }] : []),
+        {
+          id: 'documentos',
+          title: 'Documentos',
+          onPress: () => {
+            onClose();
+            onOpenTerminosCondiciones?.();
+          }
+        },
     {
       id: 'associations',
       title: 'Asociaciones',
       onPress: () => {
         onClose();
-        // Navegar a asociaciones
-      }
-    },
-    // Solo mostrar si el usuario tiene múltiples asociaciones
-    ...(associations.length > 1 ? [{
-      id: 'activeAssociation',
-      title: 'Cambiar Asociación Activa',
-      onPress: () => {
-        Alert.alert('DEBUG', 'Se hizo clic en Cambiar Asociación Activa');
-        onClose();
-        onOpenActiveAssociation?.();
-      }
-    }] : []),
-    {
-      id: 'settings',
-      title: 'Configuración',
-      onPress: () => {
-        onClose();
-        // Navegar a configuración
+        onOpenAssociations?.();
       }
     },
     {
-      id: 'help',
-      title: 'Ayuda',
-      onPress: () => {
-        onClose();
-        // Navegar a ayuda
-      }
-    },
-    {
-      id: 'about',
+      id: 'acercaDe',
       title: 'Acerca de',
       onPress: () => {
         onClose();
-        // Navegar a acerca de
+        onOpenAcercaDe?.();
       }
     }
   ];
@@ -90,17 +71,27 @@ const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAs
 
   return (
     <View style={styles.container}>
+      {/* Botón de cerrar - REMOVIDO (se cierra tocando fuera) */}
+      
       {/* Header del menú */}
       <View style={styles.header}>
         <View style={styles.userInfo}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {user?.nombre?.charAt(0)?.toUpperCase() || 'U'}
-            </Text>
-          </View>
+          {/* Avatar del usuario */}
+          {user?.avatar ? (
+            <Image 
+              source={{ uri: user.avatar }} 
+              style={styles.avatarImage}
+            />
+          ) : (
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>
+                {user?.name?.charAt(0)?.toUpperCase() || user?.nombre?.charAt(0)?.toUpperCase() || 'U'}
+              </Text>
+            </View>
+          )}
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{user?.nombre || 'Usuario'}</Text>
-            <Text style={styles.userRole}>{getRoleDisplayName(user?.role?.nombre || '') || 'Usuario'}</Text>
+            <Text style={styles.userName}>{user?.name || user?.nombre || 'Usuario'}</Text>
+            <Text style={styles.userEmail}>{user?.email || ''}</Text>
             {selectedInstitution && (
               <Text style={styles.institutionName}>
                 {selectedInstitution.account.nombre}
@@ -138,29 +129,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  // Estilos del botón de cerrar - REMOVIDOS (ya no se usan)
   header: {
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingTop: 70,
+    paddingBottom: 30,
     paddingHorizontal: 20,
     backgroundColor: '#0E5FCE',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  avatarImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    marginRight: 15,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
   avatarContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   avatarText: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#0E5FCE',
   },
@@ -168,9 +176,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: '#E8F0FE',
     marginBottom: 4,
   },
   userRole: {
@@ -179,34 +192,47 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   institutionName: {
-    fontSize: 12,
-    color: '#E8F0FE',
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    opacity: 0.9,
   },
   menuContainer: {
     flex: 1,
-    paddingTop: 10,
+    paddingTop: 15,
   },
   menuItem: {
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    paddingVertical: 20,
+    paddingHorizontal: 25,
+    marginHorizontal: 10,
+    marginBottom: 8,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    // Borde izquierdo azul removido
   },
   menuTitle: {
     fontSize: 16,
     color: '#333333',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   footer: {
     padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    paddingBottom: 30,
+    backgroundColor: '#F8F9FA',
   },
   logoutButton: {
-    paddingVertical: 15,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     backgroundColor: '#FF6B6B',
-    borderRadius: 8,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   logoutText: {
     fontSize: 16,

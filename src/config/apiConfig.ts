@@ -12,27 +12,27 @@ const isEmulator = () => {
 };
 
 // Configuración base del API
-export const getApiBaseUrl = () => {
+export const getApiBaseUrl= () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost
   // En dispositivo físico: IP de la máquina de desarrollo
   
   if (Platform.OS === 'android') {
-    // Para emulador Android
-    return 'http://192.168.68.107:3000';
+    // Para emulador Android - usar 10.0.2.2 que es la IP del host desde el emulador
+    return __DEV__ ? 'http://192.168.68.103:3000' : 'https://api.kiki.com.ar';
   } else if (Platform.OS === 'ios') {
     // Para emulador iOS o dispositivo físico iOS
-    return 'http://192.168.68.107:3000';
+    return __DEV__ ? 'http://192.168.68.103:3000' : 'https://api.kiki.com.ar';
   }
   
   // Fallback
-  return 'http://192.168.68.107:3000';
+  return __DEV__ ? 'http://192.168.68.103' : 'https://api.kiki.com.ar';
 };
 
 
 // Configuración base del API
-export const getApiBaseUrlRemote = () => {
+export const getApiBaseUrlRemote= () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost

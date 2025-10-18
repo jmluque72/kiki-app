@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
 } from 'react-native';
 import CommonHeader from '../components/CommonHeader';
 
@@ -59,7 +58,7 @@ const SettingsScreen = ({ navigation }: { navigation: any }) => {
           subtitle: 'Sincronizar datos manualmente',
           type: 'button',
           onPress: () => {
-            Alert.alert('Sincronización', 'Sincronizando datos...');
+            console.log('Sincronización: Sincronizando datos...');
           },
         },
       ],
@@ -73,14 +72,7 @@ const SettingsScreen = ({ navigation }: { navigation: any }) => {
           subtitle: 'Eliminar datos temporales de la aplicación',
           type: 'button',
           onPress: () => {
-            Alert.alert(
-              'Limpiar caché',
-              '¿Estás seguro de que quieres limpiar la caché?',
-              [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Limpiar', style: 'destructive' },
-              ]
-            );
+            console.log('Limpiar caché: ¿Estás seguro de que quieres limpiar la caché?');
           },
         },
         {
@@ -89,7 +81,7 @@ const SettingsScreen = ({ navigation }: { navigation: any }) => {
           subtitle: 'Exportar tus datos personales',
           type: 'button',
           onPress: () => {
-            Alert.alert('Exportar datos', 'Funcionalidad en desarrollo');
+            console.log('Exportar datos: Funcionalidad en desarrollo');
           },
         },
       ],
@@ -109,7 +101,7 @@ const SettingsScreen = ({ navigation }: { navigation: any }) => {
           subtitle: 'Leer términos y condiciones',
           type: 'button',
           onPress: () => {
-            Alert.alert('Términos y condiciones', 'Funcionalidad en desarrollo');
+            console.log('Términos y condiciones: Funcionalidad en desarrollo');
           },
         },
         {
@@ -118,7 +110,7 @@ const SettingsScreen = ({ navigation }: { navigation: any }) => {
           subtitle: 'Leer política de privacidad',
           type: 'button',
           onPress: () => {
-            Alert.alert('Política de privacidad', 'Funcionalidad en desarrollo');
+            console.log('Política de privacidad: Funcionalidad en desarrollo');
           },
         },
       ],

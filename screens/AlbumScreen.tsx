@@ -8,14 +8,15 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Alert,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
 import favoriteService from '../src/services/favoriteService';
 import ImageFullScreen from '../components/ImageFullScreen';
 import CommonHeader from '../components/CommonHeader';
+import withSideMenu from '../components/withSideMenu';
 import { toastService } from '../src/services/toastService';
+import { getFirstMedia, getMediaType } from '../src/utils/mediaUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
 const imageSize = (screenWidth - 60) / 2; // 2 columnas con padding
@@ -47,7 +48,7 @@ interface FlatListItem {
   data: any;
 }
 
-const AlbumScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOpenNotifications }) => {
+const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () => void }> = ({ onOpenNotifications, onOpenMenu }) => {
   const { user } = useAuth();
   const { selectedInstitution, userAssociations } = useInstitution();
   const [favorites, setFavorites] = useState<FavoriteActivity[]>([]);
@@ -103,7 +104,8 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOpenNoti
       // Obtener el nombre del estudiante de los participantes o usar el del usuario
       let studentName = getUserStudentName(); // Fallback al estudiante del usuario
       
-      if (activity.activity.participantes && activity.activity.participantes.length > 0) {
+      // Verificar que activity.activity no sea null antes de acceder a participantes
+      if (activity.activity && activity.activity.participantes && activity.activity.participantes.length > 0) {
         const participant = activity.activity.participantes[0];
         if (participant.nombre && participant.apellido) {
           studentName = `${participant.nombre} ${participant.apellido}`;
@@ -191,7 +193,7 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOpenNoti
       // console.log('✅ [AlbumScreen] Favoritos cargados y agrupados:', favoritesData.length, 'en', grouped.length, 'secciones');
     } catch (error) {
       console.error('❌ [AlbumScreen] Error cargando favoritos:', error);
-      Alert.alert('Error', 'No se pudieron cargar los favoritos');
+      console.log('Error: No se pudieron cargar los favoritos');
     } finally {
       if (isRefresh) {
         setRefreshing(false);
@@ -320,8 +322,9 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOpenNoti
     //   imagenesLength: activity.activity.imagenes?.length
     // });
     
-    if (!activity.activity.imagenes || activity.activity.imagenes.length === 0) {
-      // console.log('⚠️ [AlbumScreen] Actividad sin imágenes:', activity.activity.titulo);
+    // Verificar que activity.activity no sea null antes de acceder a sus propiedades
+    if (!activity.activity || !activity.activity.imagenes || activity.activity.imagenes.length === 0) {
+      // console.log('⚠️ [AlbumScreen] Actividad sin imágenes:', activity.activity?.titulo);
       return null;
     }
 
@@ -331,30 +334,58 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void }> = ({ onOpenNoti
           style={styles.imageWrapper}
           onPress={() => handleImagePress(activity, 0)}
         >
-          <Image
-            source={{ uri: activity.activity.imagenes[0] }}
-            style={styles.image}
-            resizeMode="cover"
-            onLoad={() => {/* console.log('✅ [AlbumScreen] Imagen cargada:', activity.activity.imagenes[0]) */}}
-            onError={(error) => {/* console.log('❌ [AlbumScreen] Error cargando imagen:', error.nativeEvent.error, 'URL:', activity.activity.imagenes[0]) */}}
-          />
-          {activity.activity.imagenes.length > 1 && (
-            <View style={styles.multipleImagesIndicator}>
-              <Text style={styles.multipleImagesText}>+{activity.activity.imagenes.length - 1}</Text>
-            </View>
-          )}
+          {(() => {
+            const firstMedia = getFirstMedia(activity.activity?.imagenes || []);
+            if (!firstMedia) return null;
+
+            return (
+              <>
+                {firstMedia.type === 'video' ? (
+                  // Preview especial para videos
+                  <View style={styles.videoPreviewContainer}>
+                    <View style={styles.videoPreviewBackground}>
+                      <View style={styles.videoPreviewIcon}>
+                        <Text style={styles.videoPreviewIconText}>🎬</Text>
+                      </View>
+                      <Text style={styles.videoPreviewText}>VIDEO</Text>
+                    </View>
+                    {/* Overlay de play */}
+                    <View style={styles.videoOverlay}>
+                      <View style={styles.videoPlayButton}>
+                        <Text style={styles.videoPlayIcon}>▶</Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  // Imagen normal
+                  <Image
+                    source={{ uri: firstMedia.url }}
+                    style={styles.image}
+                    resizeMode="cover"
+                    onLoad={() => {/* console.log('✅ [AlbumScreen] Media cargada:', firstMedia.url) */}}
+                    onError={(error) => {/* console.log('❌ [AlbumScreen] Error cargando media:', error.nativeEvent.error, 'URL:', firstMedia.url) */}}
+                  />
+                )}
+                {activity.activity?.imagenes && activity.activity.imagenes.length > 1 && (
+                  <View style={styles.multipleImagesIndicator}>
+                    <Text style={styles.multipleImagesText}>+{activity.activity.imagenes.length - 1}</Text>
+                  </View>
+                )}
+              </>
+            );
+          })()}
         </TouchableOpacity>
         <Text style={styles.activityTitle} numberOfLines={2}>
-          {activity.activity.titulo}
+          {activity.activity?.titulo || 'Sin título'}
         </Text>
         <Text style={styles.activityDate}>
-          {activity.activity.createdAt ? new Date(activity.activity.createdAt).toLocaleDateString('es-ES', {
+          {activity.activity?.createdAt ? new Date(activity.activity.createdAt).toLocaleDateString('es-ES', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric'
           }) : 'Sin fecha'}
         </Text>
-        {activity.activity.division && (
+        {activity.activity?.division && (
           <Text style={styles.activityDivision} numberOfLines={1}>
             {activity.activity.division.nombre}
           </Text>
@@ -532,6 +563,32 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
   },
+  videoPreviewContainer: {
+    width: '100%',
+    aspectRatio: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 8,
+  },
+  videoPreviewBackground: {
+    flex: 1,
+    backgroundColor: '#0E5FCE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  videoPreviewIcon: {
+    marginBottom: 4,
+  },
+  videoPreviewIconText: {
+    fontSize: 24,
+  },
+  videoPreviewText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
   multipleImagesIndicator: {
     position: 'absolute',
     top: 8,
@@ -587,6 +644,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  // Estilos para videos
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  videoPlayButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  videoPlayIcon: {
+    fontSize: 16,
+    color: '#0E5FCE',
+    fontWeight: 'bold',
+    marginLeft: 2, // Ajuste visual para centrar el triángulo
+  },
+  videoIcon: {
+    fontSize: 24,
+    color: '#FFFFFF',
+  },
 });
 
-export default AlbumScreen;
+export default withSideMenu(AlbumScreen);

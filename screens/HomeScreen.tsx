@@ -4,8 +4,7 @@ import {
   Text,
   Image,
   StyleSheet,
-  TouchableOpacity,
-  Alert
+  TouchableOpacity
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import NotificationCenter from '../components/NotificationCenter';
@@ -19,9 +18,9 @@ import EventosScreen from './EventosScreen';
 import PerfilScreen from './PerfilScreen';
 import AlbumScreen from './AlbumScreen';
 
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
-import PushNotificationService from '../src/services/pushNotificationService';
+// import PushNotificationService from '../src/services/pushNotificationService';
 
 const Tab = createBottomTabNavigator();
 
@@ -41,14 +40,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
   }, [activeAssociation]);
 
   // Inicializar notificaciones push cuando el usuario llega al Home
-  useEffect(() => {
-    try {
-      PushNotificationService.initialize();
-      console.log('🔔 [HomeScreen] Push notifications initialized en HomeScreen');
-    } catch (error) {
-      console.error('❌ [HomeScreen] Error initializing push notifications:', error);
-    }
-  }, []);
+  // useEffect(() => {
+  //   try {
+  //     PushNotificationService.initialize();
+  //     console.log('🔔 [HomeScreen] Push notifications initialized en HomeScreen');
+  //   } catch (error) {
+  //     console.error('❌ [HomeScreen] Error initializing push notifications:', error);
+  //   }
+  // }, []);
   
   const handleOpenNotifications = () => {
     setNotificationCenterVisible(true);
@@ -62,11 +61,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
     if (userAssociations.length > 1) {
       setShowInstitutionSelector(true);
     } else {
-      Alert.alert(
-        'Sin Opciones',
-        'Solo tienes una institución asociada.',
-        [{ text: 'OK' }]
-      );
+      // Solo tienes una institución asociada - no mostrar alert
+      console.log('Solo tienes una institución asociada');
     }
   };
 

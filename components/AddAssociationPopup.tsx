@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, ScrollView } from 'react-native';
 import { apiClient } from '../src/services/api';
 
 interface AddAssociationPopupProps {
@@ -53,7 +53,7 @@ const AddAssociationPopup: React.FC<AddAssociationPopupProps> = ({ visible, onCl
       }
     } catch (error) {
       console.error('Error cargando accounts:', error);
-      Alert.alert('Error', 'No se pudieron cargar las instituciones');
+      console.log('Error: No se pudieron cargar las instituciones');
     } finally {
       setLoadingAccounts(false);
     }
@@ -68,7 +68,7 @@ const AddAssociationPopup: React.FC<AddAssociationPopupProps> = ({ visible, onCl
       }
     } catch (error) {
       console.error('Error cargando grupos:', error);
-      Alert.alert('Error', 'No se pudieron cargar las divisiones');
+      console.log('Error: No se pudieron cargar las divisiones');
     } finally {
       setLoadingGroups(false);
     }
@@ -88,7 +88,7 @@ const AddAssociationPopup: React.FC<AddAssociationPopupProps> = ({ visible, onCl
 
   const handleAdd = () => {
     if (!tipo.trim() || !selectedAccountId || !selectedGroupId || !dniAlumno.trim()) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      console.log('Error: Por favor completa todos los campos');
       return;
     }
 

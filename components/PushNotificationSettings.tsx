@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   Switch,
   ActivityIndicator,
 } from 'react-native';
@@ -38,17 +37,10 @@ const PushNotificationSettings: React.FC<PushNotificationSettingsProps> = ({ onC
       try {
         const granted = await requestPermissions();
         if (!granted) {
-          Alert.alert(
-            'Permisos Denegados',
-            'Para recibir notificaciones push, necesitas habilitar los permisos en la configuración de la app.',
-            [
-              { text: 'Configuración', onPress: openSettings },
-              { text: 'Cancelar', style: 'cancel' }
-            ]
-          );
+          console.log('Permisos Denegados: Para recibir notificaciones push, necesitas habilitar los permisos en la configuración de la app.');
         }
       } catch (error) {
-        Alert.alert('Error', 'No se pudieron solicitar los permisos para notificaciones.');
+        console.log('Error: No se pudieron solicitar los permisos para notificaciones.');
       } finally {
         setIsRequestingPermissions(false);
       }

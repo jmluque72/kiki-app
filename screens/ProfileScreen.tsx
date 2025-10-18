@@ -6,9 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import CommonHeader from '../components/CommonHeader';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 
@@ -22,9 +21,9 @@ const ProfileScreen = ({ navigation }: { navigation: any }) => {
     try {
       await updateProfile({ nombre, email });
       setIsEditing(false);
-      Alert.alert('Éxito', 'Perfil actualizado correctamente');
+      console.log('Éxito: Perfil actualizado correctamente');
     } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar el perfil');
+      console.log('Error: No se pudo actualizar el perfil');
     }
   };
 

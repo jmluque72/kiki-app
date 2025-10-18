@@ -7,14 +7,17 @@ import {
   Alert,
   StyleSheet,
   Image,
-  Modal
+  Modal,
+  RefreshControl
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useStudents } from '../src/hooks/useStudents';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { apiClient } from '../src/services/api';
 import CommonHeader from '../components/CommonHeader';
+import SideMenu from '../components/SideMenu';
+import { useSideMenu } from '../src/hooks/useSideMenu';
 import { useCustomAlert } from '../src/hooks/useCustomAlert';
 import CustomAlert from '../components/CustomAlert';
 import CameraKitQRScanner from '../components/CameraKitQRScanner';
@@ -23,6 +26,7 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   const { token } = useAuth();
   const { showSuccess, showError, isVisible, alertConfig } = useCustomAlert();
+  const { showMenu, openMenu, closeMenu } = useSideMenu();
   
   const { students, loading, error, total } = useStudents(
     selectedInstitution?.account._id,
@@ -45,25 +49,57 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
   const [authorizedContacts, setAuthorizedContacts] = useState<any[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   
+  // Estado para pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Estado para detectar cambios pendientes
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalAttendance, setOriginalAttendance] = useState<{ [key: string]: boolean }>({});
+  
+  // Estado para verificar si la asistencia del día ya fue tomada
+  const [attendanceAlreadyTaken, setAttendanceAlreadyTaken] = useState(false);
+  
 
   // Función para marcar/desmarcar asistencia
   const toggleAttendance = (studentId: string) => {
+    // Verificar si la asistencia del día ya fue tomada
+    if (attendanceAlreadyTaken) {
+      showError('No se puede modificar', 'La asistencia de este día ya fue tomada y no se puede modificar');
+      return;
+    }
+    
     // Verificar si el alumno ya fue retirado
     if (withdrawals[studentId]) {
       showError('No se puede modificar', 'Este alumno ya fue retirado y no se puede cambiar su asistencia');
       return;
     }
     
-    setAttendance(prev => ({
-      ...prev,
-      [studentId]: !prev[studentId]
-    }));
+    setAttendance(prev => {
+      const newAttendance = {
+        ...prev,
+        [studentId]: !prev[studentId]
+      };
+      
+      // Detectar si hay cambios con respecto al estado original
+      const hasChanges = Object.keys(newAttendance).some(key => 
+        newAttendance[key] !== originalAttendance[key]
+      ) || Object.keys(originalAttendance).some(key => 
+        originalAttendance[key] !== newAttendance[key]
+      );
+      
+      setHasUnsavedChanges(hasChanges);
+      return newAttendance;
+    });
   };
 
-  // Función para cargar asistencias del día
-  const loadDailyAttendance = async () => {
+  // Función unificada para cargar asistencias del día
+  const loadDailyAttendance = async (isRefresh = false) => {
     if (!selectedInstitution?.account?._id || !selectedInstitution?.division?._id) {
       return;
+    }
+
+    if (isRefresh) {
+      setRefreshing(true);
     }
 
     try {
@@ -72,6 +108,8 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
       const mm = String(today.getMonth() + 1).padStart(2, '0');
       const dd = String(today.getDate()).padStart(2, '0');
       const dateStr = `${yyyy}-${mm}-${dd}`;
+
+      console.log('🔄 [ATTENDANCE] Cargando asistencias para:', dateStr);
 
       const response = await apiClient.get(`/asistencia/by-date`, {
         params: {
@@ -101,18 +139,36 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
         
         setAttendance(attendanceMap);
         setWithdrawals(withdrawalsMap);
+        setOriginalAttendance(attendanceMap); // Guardar estado original
+        setHasUnsavedChanges(false); // Resetear cambios pendientes
+        setAttendanceAlreadyTaken(true); // Marcar que la asistencia ya fue tomada
         console.log('✅ [ATTENDANCE] Asistencias cargadas:', attendanceMap);
         console.log('✅ [WITHDRAWALS] Retiradas cargadas:', withdrawalsMap);
+        console.log('🔒 [ATTENDANCE] Asistencia ya fue tomada - bloqueando edición');
       } else {
         setAttendance({});
         setWithdrawals({});
+        setOriginalAttendance({}); // Guardar estado original vacío
+        setHasUnsavedChanges(false); // Resetear cambios pendientes
+        setAttendanceAlreadyTaken(false); // Marcar que la asistencia no fue tomada
         console.log('ℹ️ [ATTENDANCE] No hay asistencias para hoy');
       }
     } catch (error) {
       console.error('❌ [ATTENDANCE] Error cargando asistencias:', error);
       setAttendance({});
       setWithdrawals({});
+      setAttendanceAlreadyTaken(false); // Resetear estado en caso de error
+    } finally {
+      if (isRefresh) {
+        setRefreshing(false);
+      }
     }
+  };
+
+  // Función para manejar el pull-to-refresh
+  const onRefresh = async () => {
+    console.log('🔄 [REFRESH] Iniciando actualización manual...');
+    await loadDailyAttendance(true);
   };
 
   // Función para cargar perfiles del estudiante
@@ -294,9 +350,9 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
 
       if (result.success) {
         showSuccess('Asistencias', 'Asistencia guardada correctamente');
-        // Limpiar el estado de asistencia y retiradas después de guardar
-        setAttendance({});
-        setWithdrawals({});
+        // Actualizar el estado original y resetear cambios pendientes
+        setOriginalAttendance(attendance);
+        setHasUnsavedChanges(false);
       } else {
         console.error('❌ Error del servidor:', result);
         showError('Error', result.message || 'Error al guardar la asistencia');
@@ -435,7 +491,7 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
     if (students.length > 0) {
       fetchAsistenciaPorFecha();
       // También cargar retiradas para mostrar estado bloqueado desde el inicio
-      loadDailyAttendance();
+      loadDailyAttendance(false);
     }
   }, [selectedInstitution?.account?._id, selectedInstitution?.division?._id, students.length]);
 
@@ -444,12 +500,23 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
     <View style={styles.homeContainer}>
               <CommonHeader 
           onOpenNotifications={onOpenNotifications} 
+          onOpenMenu={openMenu}
           activeStudent={getActiveStudent()}
         />
       
       <ScrollView 
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#FF8C42']} // Android
+            tintColor="#FF8C42" // iOS
+            title="Actualizando asistencias..."
+            titleColor="#666"
+          />
+        }
       >
         {/* Pestañas para coordinadores */}
           {token && (
@@ -486,9 +553,13 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
           {activeTab === 'attendance' && (
             <View style={styles.estadisticas}>
               <TouchableOpacity 
-                style={styles.todoContainer}
+                style={[
+                  styles.todoContainer,
+                  attendanceAlreadyTaken && styles.todoContainerDisabled
+                ]}
                 onPress={toggleAllAttendance}
-                activeOpacity={0.7}
+                activeOpacity={attendanceAlreadyTaken ? 1 : 0.7}
+                disabled={attendanceAlreadyTaken}
               >
                 <Text style={styles.todoText}>Todo</Text>
                 <View style={[
@@ -525,14 +596,15 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
             ) : (
               students.map((student, index) => {
                 const isWithdrawn = withdrawals[student._id];
-                const isBlocked = isWithdrawn;
+                const isBlocked = isWithdrawn || attendanceAlreadyTaken;
                 
                 return (
                   <TouchableOpacity 
                     key={student._id} 
                     style={[
                       styles.personaItem,
-                      isBlocked && styles.blockedItem
+                      isWithdrawn && styles.blockedItem,
+                      attendanceAlreadyTaken && !isWithdrawn && styles.attendanceTakenItem
                     ]}
                     onPress={() => toggleAttendance(student._id)}
                     activeOpacity={isBlocked ? 1 : 0.7}
@@ -544,14 +616,16 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
                           source={{ uri: student.avatar }} 
                           style={[
                             styles.personaAvatarImage,
-                            isBlocked && styles.blockedAvatarImage
+                            isWithdrawn && styles.blockedAvatarImage,
+                            attendanceAlreadyTaken && !isWithdrawn && styles.attendanceTakenAvatarImage
                           ]}
                           resizeMode="cover"
                         />
                       ) : (
                         <Text style={[
                           styles.personaIcon,
-                          isBlocked && styles.blockedIcon
+                          isWithdrawn && styles.blockedIcon,
+                          attendanceAlreadyTaken && !isWithdrawn && styles.attendanceTakenIcon
                         ]}>👤</Text>
                       )}
                       {attendance[student._id] && (
@@ -567,19 +641,27 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
                     </View>
                     <Text style={[
                       styles.personaNombre,
-                      isBlocked && styles.blockedText
+                      isWithdrawn && styles.blockedText,
+                      attendanceAlreadyTaken && !isWithdrawn && styles.attendanceTakenText
                     ]}>{student.nombre}</Text>
                     <Text style={[
                       styles.personaApellido,
-                      isBlocked && styles.blockedText
+                      isWithdrawn && styles.blockedText,
+                      attendanceAlreadyTaken && !isWithdrawn && styles.attendanceTakenText
                     ]}>{student.apellido}</Text>
                     <Text style={[
                       styles.personaDivision,
-                      isBlocked && styles.blockedText
+                      isWithdrawn && styles.blockedText,
+                      attendanceAlreadyTaken && !isWithdrawn && styles.attendanceTakenText
                     ]}>{student.division?.nombre}</Text>
                     {isWithdrawn && (
                       <Text style={styles.withdrawnStatusText}>
                         Retirado por: {withdrawals[student._id].withdrawnByName}
+                      </Text>
+                    )}
+                    {attendanceAlreadyTaken && !isWithdrawn && (
+                      <Text style={styles.attendanceTakenStatusText}>
+                        Asistencia ya tomada
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -667,23 +749,69 @@ const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => 
           </View>
         )}
 
+        {/* Mensaje de cambios pendientes */}
+        {activeTab === 'attendance' && hasUnsavedChanges && (
+          <View style={styles.unsavedChangesContainer}>
+            <Text style={styles.unsavedChangesText}>
+              Tienes cambios pendientes - Guarda la asistencia para confirmar
+            </Text>
+          </View>
+        )}
+
+        {/* Mensaje cuando la asistencia ya fue tomada */}
+        {activeTab === 'attendance' && attendanceAlreadyTaken && (
+          <View style={styles.attendanceTakenContainer}>
+            <Text style={styles.attendanceTakenText}>
+              🔒 La asistencia de este día ya fue tomada y no se puede modificar
+            </Text>
+          </View>
+        )}
+
+        {/* Mensaje instructivo para pestaña de retiradas */}
+        {activeTab === 'withdrawal' && (
+          <View style={styles.instructionContainer}>
+            <Text style={styles.instructionText}>
+              Tocar sobre el estudiante para configurar la retirada
+            </Text>
+          </View>
+        )}
+
         {/* Botones solo para pestaña de asistencias */}
         {activeTab === 'attendance' && (
           <>
-            {/* Botón Escáner QR */}
-            <TouchableOpacity 
-              style={styles.qrButton}
-              onPress={() => setShowQRScanner(true)}
-            >
-              <Text style={styles.qrButtonText}>Escanear QR</Text>
-            </TouchableOpacity>
-
             {/* Botón Guardar Asistencia */}
             <TouchableOpacity 
-              style={styles.modificarButton}
+              style={[
+                styles.modificarButton,
+                hasUnsavedChanges && styles.modificarButtonHighlighted,
+                attendanceAlreadyTaken && styles.modificarButtonDisabled
+              ]}
               onPress={handleSaveAttendance}
+              disabled={attendanceAlreadyTaken}
             >
-              <Text style={styles.modificarButtonText}>Guardar Asistencia</Text>
+              <Text style={[
+                styles.modificarButtonText,
+                attendanceAlreadyTaken && styles.modificarButtonTextDisabled
+              ]}>
+                {attendanceAlreadyTaken ? 'Asistencia ya tomada' : 'Guardar Asistencia'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Botón Escáner QR */}
+            <TouchableOpacity 
+              style={[
+                styles.qrButton,
+                attendanceAlreadyTaken && styles.qrButtonDisabled
+              ]}
+              onPress={() => setShowQRScanner(true)}
+              disabled={attendanceAlreadyTaken}
+            >
+              <Text style={[
+                styles.qrButtonText,
+                attendanceAlreadyTaken && styles.qrButtonTextDisabled
+              ]}>
+                {attendanceAlreadyTaken ? 'QR Deshabilitado' : 'Escanear QR'}
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -885,6 +1013,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: fonts.bold,
   },
+  todoContainerDisabled: {
+    backgroundColor: '#F0F0F0',
+    opacity: 0.6,
+  },
   totalText: {
     fontSize: 16,
     color: '#0E5FCE',
@@ -971,12 +1103,31 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     alignItems: 'center',
     marginHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 15,
+  },
+  modificarButtonHighlighted: {
+    backgroundColor: '#E65100',
+    shadowColor: '#E65100',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
   },
   modificarButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontFamily: fonts.semiBold,
+  },
+  modificarButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  modificarButtonTextDisabled: {
+    color: '#999999',
   },
   loadingContainer: {
     flex: 1,
@@ -1024,6 +1175,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  qrButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  qrButtonTextDisabled: {
+    color: '#999999',
   },
   // Estilos para pestañas
   tabsContainer: {
@@ -1093,6 +1252,34 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     color: '#E65100',
     fontWeight: '600',
+  },
+  // Estilos para cuando la asistencia ya fue tomada
+  attendanceTakenItem: {
+    backgroundColor: '#F5F5F5',
+    opacity: 0.6,
+  },
+  attendanceTakenAvatarImage: {
+    opacity: 0.5,
+  },
+  attendanceTakenIcon: {
+    opacity: 0.5,
+  },
+  attendanceTakenText: {
+    opacity: 0.6,
+    color: '#999999',
+    fontWeight: '500',
+  },
+  attendanceTakenStatusText: {
+    fontSize: 9,
+    color: '#999999',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 3,
+    backgroundColor: '#F0F0F0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   withdrawnMark: {
     position: 'absolute',
@@ -1265,6 +1452,63 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: fonts.bold,
+  },
+  // Estilos para mensaje de cambios pendientes
+  unsavedChangesContainer: {
+    backgroundColor: '#FFF3E0',
+    borderColor: '#FF9800',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  unsavedChangesText: {
+    color: '#E65100',
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  // Estilos para mensaje instructivo de retiradas
+  instructionContainer: {
+    backgroundColor: '#E3F2FD',
+    borderColor: '#2196F3',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  instructionText: {
+    color: '#1976D2',
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  // Estilos para mensaje de asistencia ya tomada
+  attendanceTakenContainer: {
+    backgroundColor: '#F0F0F0',
+    borderColor: '#999999',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  attendanceTakenText: {
+    color: '#666666',
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
 

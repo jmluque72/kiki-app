@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
 import { useInstitution } from '../contexts/InstitutionContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContextHybrid';
 
 interface InstitutionSelectorProps {
   onInstitutionSelected: () => void;

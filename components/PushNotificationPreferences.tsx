@@ -5,10 +5,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   Switch,
-  Alert,
   ScrollView,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { usePushNotifications } from '../src/hooks/usePushNotifications';
 import { fonts } from '../src/config/fonts';
 
@@ -63,10 +62,10 @@ const PushNotificationPreferences: React.FC<PushNotificationPreferencesProps> = 
       // Simular guardado
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      Alert.alert('Éxito', 'Preferencias guardadas correctamente');
+      console.log('Éxito: Preferencias guardadas correctamente');
     } catch (error) {
       console.error('Error guardando preferencias:', error);
-      Alert.alert('Error', 'No se pudieron guardar las preferencias');
+      console.log('Error: No se pudieron guardar las preferencias');
     } finally {
       setLoading(false);
     }
@@ -74,14 +73,7 @@ const PushNotificationPreferences: React.FC<PushNotificationPreferencesProps> = 
 
   const handleTogglePreference = async (key: keyof NotificationPreferences) => {
     if (!isEnabled) {
-      Alert.alert(
-        'Notificaciones Deshabilitadas',
-        'Primero debes habilitar las notificaciones push para configurar las preferencias.',
-        [
-          { text: 'Habilitar', onPress: requestPermissions },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
-      );
+      console.log('Notificaciones Deshabilitadas: Primero debes habilitar las notificaciones push para configurar las preferencias.');
       return;
     }
 
@@ -96,14 +88,7 @@ const PushNotificationPreferences: React.FC<PushNotificationPreferencesProps> = 
 
   const handleTestNotification = () => {
     if (!isEnabled) {
-      Alert.alert(
-        'Notificaciones Deshabilitadas',
-        'Primero debes habilitar las notificaciones push para enviar notificaciones de prueba.',
-        [
-          { text: 'Habilitar', onPress: requestPermissions },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
-      );
+      console.log('Notificaciones Deshabilitadas: Primero debes habilitar las notificaciones push para enviar notificaciones de prueba.');
       return;
     }
 

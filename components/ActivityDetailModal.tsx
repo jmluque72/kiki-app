@@ -8,7 +8,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  Alert,
   FlatList
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
@@ -17,6 +16,7 @@ import { ActivityService } from '../src/services/activityService';
 import favoriteService from '../src/services/favoriteService';
 import { useInstitution } from '../contexts/InstitutionContext';
 import ImageFullScreen from './ImageFullScreen';
+import { getMediaType } from '../src/utils/mediaUtils';
 
 interface Activity {
   _id: string;
@@ -100,13 +100,10 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
       await favoriteService.toggleFavorite(activity._id, activeStudent._id, newFavoriteStatus);
       setIsFavorite(newFavoriteStatus);
       
-      Alert.alert(
-        'Éxito',
-        newFavoriteStatus ? 'Agregado a favoritos' : 'Eliminado de favoritos'
-      );
+      console.log(newFavoriteStatus ? 'Agregado a favoritos' : 'Eliminado de favoritos');
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      Alert.alert('Error', 'No se pudo actualizar el favorito');
+      console.log('Error: No se pudo actualizar el favorito');
     } finally {
       setLoadingFavorite(false);
     }
@@ -167,66 +164,35 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
 
 
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (canEdit) {
-      Alert.alert(
-        'Eliminar Actividad',
-        '¿Estás seguro de que quieres eliminar esta actividad?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { 
-            text: 'Eliminar', 
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                console.log('🗑️ [ActivityDetailModal] Iniciando eliminación de actividad:', activity._id);
-                
-                const result = await ActivityService.deleteActivity(activity._id);
-                
-                if (result.success) {
-                  console.log('✅ [ActivityDetailModal] Actividad eliminada exitosamente');
-                  
-                  // Cerrar el modal
-                  onClose();
-                  
-                  // Mostrar mensaje de éxito
-                  Alert.alert(
-                    'Éxito',
-                    'Actividad eliminada exitosamente',
-                    [
-                      {
-                        text: 'OK',
-                        onPress: () => {
-                          // Recargar la pantalla del home
-                          if (onEdit) {
-                            onEdit('refresh');
-                          }
-                        }
-                      }
-                    ]
-                  );
-                } else {
-                  console.log('❌ [ActivityDetailModal] Error al eliminar actividad:', result.message);
-                  
-                  Alert.alert(
-                    'Error',
-                    result.message || 'Error al eliminar la actividad',
-                    [{ text: 'OK' }]
-                  );
-                }
-              } catch (error) {
-                console.error('❌ [ActivityDetailModal] Error inesperado:', error);
-                
-                Alert.alert(
-                  'Error',
-                  'Error inesperado al eliminar la actividad',
-                  [{ text: 'OK' }]
-                );
-              }
-            }
+      console.log('Eliminar Actividad: ¿Estás seguro de que quieres eliminar esta actividad?');
+      try {
+        console.log('🗑️ [ActivityDetailModal] Iniciando eliminación de actividad:', activity._id);
+        
+        const result = await ActivityService.deleteActivity(activity._id);
+        
+        if (result.success) {
+          console.log('✅ [ActivityDetailModal] Actividad eliminada exitosamente');
+          
+          // Cerrar el modal
+          onClose();
+          
+          // Mostrar mensaje de éxito
+          console.log('Éxito: Actividad eliminada exitosamente');
+          
+          // Recargar la pantalla del home
+          if (onEdit) {
+            onEdit('refresh');
           }
-        ]
-      );
+        } else {
+          console.log('❌ [ActivityDetailModal] Error al eliminar actividad:', result.message);
+          console.log('Error:', result.message || 'Error al eliminar la actividad');
+        }
+      } catch (error) {
+        console.error('❌ [ActivityDetailModal] Error inesperado:', error);
+        console.log('Error: Error inesperado al eliminar la actividad');
+      }
     }
   };
 
@@ -304,6 +270,12 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                         style={styles.carouselImage}
                         resizeMode="cover"
                       />
+                      {/* Overlay para videos */}
+                      {getMediaType(item) === 'video' && (
+                        <View style={styles.videoOverlay}>
+                          <Text style={styles.videoIcon}>▶️</Text>
+                        </View>
+                      )}
                       {/* Botón de favorito */}
                       <TouchableOpacity
                         style={styles.favoriteButton}
@@ -660,6 +632,22 @@ const styles = StyleSheet.create({
     width: 12,
     height: 8,
     borderRadius: 4,
+  },
+  // Estilos para videos
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  videoIcon: {
+    fontSize: 48,
+    color: '#FFFFFF',
   },
 });
 

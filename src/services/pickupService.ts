@@ -27,6 +27,7 @@ export interface CreatePickupRequest {
   telefono?: string;
   relacion: string;
   divisionId: string;
+  studentId: string;
 }
 
 export interface UpdatePickupRequest {
@@ -122,7 +123,7 @@ class PickupService {
 
   // Obtener quién retira por división
   static async getPickupsByDivision(divisionId: string): Promise<Pickup[]> {
-    const response = await apiClient.get(`/pickup/division/${divisionId}`);
+    const response = await apiClient.get(`/pickups/familyadmin?division=${divisionId}`);
     return response.data.data.pickups || [];
   }
 

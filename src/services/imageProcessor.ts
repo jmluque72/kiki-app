@@ -33,6 +33,7 @@ export const processImage = async (
   try {
     console.log('🖼️ [IMAGE PROCESSOR] Procesando imagen:', imageUri);
     console.log('📏 [IMAGE PROCESSOR] Ancho máximo:', maxWidth, 'px');
+    console.log('⚙️ [IMAGE PROCESSOR] Configuración:', { maxWidth, quality, format });
 
     // Obtener dimensiones de la imagen
     const imageInfo = await getImageInfo(imageUri);
@@ -97,6 +98,8 @@ export const processImage = async (
     console.log('📦 [IMAGE PROCESSOR] Tamaño procesado:', result.size, 'bytes');
     console.log('📊 [IMAGE PROCESSOR] Reducción:', result.size && imageInfo.size ? 
       ((1 - result.size / imageInfo.size) * 100).toFixed(1) + '%' : 'N/A');
+    console.log('🔗 [IMAGE PROCESSOR] URI procesada:', result.uri);
+    console.log('📏 [IMAGE PROCESSOR] Dimensiones finales:', result.width, 'x', result.height);
 
     return processedImage;
   } catch (error) {
@@ -120,7 +123,11 @@ const getImageInfo = (imageUri: string): Promise<{
       imageUri,
       (width, height) => {
         console.log('📊 [IMAGE PROCESSOR] Imagen cargada:', width, 'x', height);
-        resolve({ width, height });
+        
+        // Intentar obtener el tamaño del archivo si es posible
+        // Nota: Image.getSize no proporciona el tamaño del archivo
+        // El tamaño se obtendrá después del procesamiento
+        resolve({ width, height, size: undefined });
       },
       (error) => {
         console.error('❌ [IMAGE PROCESSOR] Error obteniendo dimensiones:', error);

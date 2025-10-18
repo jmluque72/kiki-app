@@ -7,14 +7,13 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  Alert,
   FlatList,
   Image
 } from 'react-native';
 import { useNotifications } from '../src/hooks/useNotifications';
 import { NotificationService } from '../src/services/notificationService';
 import { useInstitution } from '../contexts/InstitutionContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useLoading } from '../contexts/LoadingContext';
 import { useStudents } from '../src/hooks/useStudents';
 import { fonts } from '../src/config/fonts';
@@ -31,7 +30,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   const [formData, setFormData] = useState({
     title: '',
     message: '',
-    type: 'coordinador' as string, // Siempre será "coordinador" desde la app
+    type: 'coordinador' as string, // Tipo específico para coordinadores
     recipients: [] as string[]
   });
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -130,27 +129,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   };
 
   const handleDeleteNotification = async (notificationId: string) => {
-    Alert.alert(
-      'Eliminar Notificación',
-      '¿Estás seguro de que quieres eliminar esta notificación? Esta acción no se puede deshacer.',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteNotification(notificationId);
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Error al eliminar la notificación');
-            }
-          }
-        }
-      ]
-    );
+    try {
+      await deleteNotification(notificationId);
+    } catch (error: any) {
+      console.log('Error al eliminar la notificación:', error.message || 'Error al eliminar la notificación');
+    }
   };
 
   const handleShowDetails = async (notificationId: string) => {
@@ -160,7 +143,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
       setSelectedNotificationDetails(details);
       setShowDetailsModal(true);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Error al cargar detalles de la notificación');
+      console.log('Error al cargar detalles de la notificación:', error.message || 'Error al cargar detalles de la notificación');
     } finally {
       setLoadingDetails(false);
     }
@@ -199,12 +182,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
 
   const handleSendNotification = async () => {
     if (!formData.title || !formData.message) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      console.log('Error: Por favor completa todos los campos');
       return;
     }
 
     if (!selectedInstitution) {
-      Alert.alert('Error', 'No hay institución seleccionada');
+      console.log('Error: No hay institución seleccionada');
       return;
     }
 
@@ -212,7 +195,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     const selectedStudentIds = Object.keys(selectedStudents).filter(id => selectedStudents[id]);
 
     if (selectedStudentIds.length === 0) {
-      Alert.alert('Error', 'Por favor selecciona al menos un alumno');
+      console.log('Error: Por favor selecciona al menos un alumno');
       return;
     }
 
@@ -251,7 +234,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
       
     } catch (error: any) {
       hideLoading();
-      Alert.alert('Error', error.message || 'Error al enviar notificación');
+      console.log('Error al enviar notificación:', error.message || 'Error al enviar notificación');
     }
   };
 
@@ -259,6 +242,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     switch (type) {
       case 'comunicacion': return '#FF6B35';
       case 'informacion': return '#4A90E2';
+      case 'coordinador': return '#0E5FCE';
       default: return '#4A90E2';
     }
   };
@@ -266,7 +250,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   // Iconos para tipos de notificación
   const notificationIcons: { [key: string]: any } = {
     comunicacion: require('../assets/design/icons/kiki_mensajes.png'),
-    informacion: require('../assets/design/icons/kiki_notificaciones.png')
+    informacion: require('../assets/design/icons/kiki_notificaciones.png'),
+    coordinador: require('../assets/design/icons/kiki_notificaciones.png')
   };
 
   const getTypeIcon = (type: string) => {

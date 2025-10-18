@@ -1,4 +1,4 @@
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContextHybrid';
 
 export const useApiError = () => {
   const { logout } = useAuth();

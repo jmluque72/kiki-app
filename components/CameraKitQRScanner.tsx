@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   Modal,
   Dimensions,
   StatusBar,
@@ -52,14 +51,7 @@ export const CameraKitQRScanner: React.FC<CameraKitQRScannerProps> = ({
         } else {
           console.log('❌ Permisos de cámara denegados');
           setHasPermission(false);
-          Alert.alert(
-            'Permisos Requeridos',
-            'Se necesitan permisos de cámara para escanear códigos QR. Por favor, habilite los permisos en la configuración de la aplicación.',
-            [
-              { text: 'Cancelar', onPress: onClose },
-              { text: 'Configuración', onPress: onClose }
-            ]
-          );
+          console.log('Permisos Requeridos: Se necesitan permisos de cámara para escanear códigos QR. Por favor, habilite los permisos en la configuración de la aplicación.');
         }
       } catch (err) {
         console.warn('Error solicitando permisos:', err);
@@ -105,30 +97,14 @@ export const CameraKitQRScanner: React.FC<CameraKitQRScannerProps> = ({
         onClose();
       } else {
         // Solo mostrar alerta si no encuentra el usuario
-        Alert.alert(
-          'Estudiante No Encontrado',
-          'No se encontró ningún estudiante con este código QR',
-          [
-            {
-              text: 'Intentar de nuevo',
-              onPress: () => setScanned(false)
-            }
-          ]
-        );
+        console.log('Estudiante No Encontrado: No se encontró ningún estudiante con este código QR');
+        setScanned(false);
       }
     } catch (error) {
       console.error('❌ [CAMERA KIT QR SCANNER] Error:', error);
       // Solo mostrar alerta en caso de error
-      Alert.alert(
-        'Error de Conexión',
-        'Error al buscar el estudiante. Verifique su conexión a internet.',
-        [
-          {
-            text: 'Intentar de nuevo',
-            onPress: () => setScanned(false)
-          }
-        ]
-      );
+      console.log('Error de Conexión: Error al buscar el estudiante. Verifique su conexión a internet.');
+      setScanned(false);
     }
   };
 

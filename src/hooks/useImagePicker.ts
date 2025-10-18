@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { launchCamera, launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native-image-picker';
+import { checkImagePermissions, checkCameraPermissions } from '../utils/permissionUtils';
 
 interface UseImagePickerReturn {
   selectedImage: string | null;
@@ -22,7 +23,7 @@ const useImagePicker = (): UseImagePickerReturn => {
     }
 
     if (response.errorCode) {
-      Alert.alert('Error', `Error al seleccionar la imagen: ${response.errorMessage || response.errorCode}`);
+      console.log('Error:', `Error al seleccionar la imagen: ${response.errorMessage || response.errorCode}`);
       return;
     }
 
@@ -34,7 +35,15 @@ const useImagePicker = (): UseImagePickerReturn => {
     }
   };
 
-  const takePhoto = () => {
+  const takePhoto = async () => {
+    console.log('📱 [IMAGE PICKER] Abriendo cámara...');
+    
+    // Verificar permisos antes de abrir la cámara
+    const hasPermission = await checkCameraPermissions();
+    if (!hasPermission) {
+      return;
+    }
+    
     setIsImagePickerOpen(true);
     
     const options = {
@@ -48,7 +57,15 @@ const useImagePicker = (): UseImagePickerReturn => {
     launchCamera(options, handleImageResponse);
   };
 
-  const pickImage = () => {
+  const pickImage = async () => {
+    console.log('📱 [IMAGE PICKER] Abriendo galería...');
+    
+    // Verificar permisos antes de abrir la galería
+    const hasPermission = await checkImagePermissions();
+    if (!hasPermission) {
+      return;
+    }
+    
     setIsImagePickerOpen(true);
     
     const options = {

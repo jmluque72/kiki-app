@@ -8,24 +8,41 @@ import {
   StyleSheet,
   TextInput,
   Modal,
-  Alert,
   Platform,
-  Switch
+  Switch,
+  RefreshControl
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useInstitution } from '../contexts/InstitutionContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from "../contexts/AuthContextHybrid"
 import { useEvents } from '../src/hooks/useEvents';
 import CommonHeader from '../components/CommonHeader';
+import withSideMenu from '../components/withSideMenu';
 import WeeklyCalendar from '../components/WeeklyCalendar';
 import EventAuthorizationButton from '../components/EventAuthorizationButton';
 import EventAuthorizationModal from '../components/EventAuthorizationModal';
+import MonthlyCalendar from '../components/MonthlyCalendar';
 
-const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
+const EventosScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications: () => void; onOpenMenu?: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   const { user } = useAuth();
-  const { events, upcomingEvents, pastEvents, loading, error, createEvent } = useEvents();
+  const { events, upcomingEvents, pastEvents, loading, error, createEvent, refreshEvents } = useEvents();
   const [selectedTab, setSelectedTab] = useState<'crear' | 'visualizar'>('visualizar');
+  
+  // Estado para el pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Función para manejar el pull-to-refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshEvents();
+    } catch (error) {
+      console.error('Error al refrescar eventos:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Estados para el calendario semanal
   const [currentWeek, setCurrentWeek] = useState(new Date());
@@ -94,6 +111,7 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
   // Verificar si el usuario es coordinador usando la asociación activa
   const { activeAssociation } = useAuth();
   const isCoordinador = activeAssociation?.role?.nombre === 'coordinador';
+  const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
   
   // Verificar si el usuario es de familia (familyadmin o familyviewer) usando la asociación activa
   const isFamilyUser = activeAssociation?.role?.nombre === 'familyadmin' || activeAssociation?.role?.nombre === 'familyviewer';
@@ -101,6 +119,17 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
   // Funciones para manejar selectores de fecha y hora
   const showDateSelector = () => {
     setShowDatePicker(true);
+  };
+
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    setSelectedDateValue(date.toISOString().split('T')[0]);
+    setEventoFecha(date.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }));
   };
 
   const showTimeSelector = () => {
@@ -119,23 +148,6 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
     setSelectedDateValue(new Date().toISOString().split('T')[0]);
   };
 
-  // Generar opciones de fecha (próximos 30 días)
-  const generateDateOptions = () => {
-    const options = [];
-    for (let i = 0; i < 30; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
-      const dateString = date.toISOString().split('T')[0];
-      const displayDate = date.toLocaleDateString('es-ES', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-      options.push({ value: dateString, label: displayDate });
-    }
-    return options;
-  };
 
   // Generar opciones de hora (cada 15 minutos)
   const generateTimeOptions = () => {
@@ -161,7 +173,7 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
 
   const handleCreateEvent = async () => {
     if (!eventoFecha || !eventoHora || !eventoTitulo || !eventoDescripcion) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      console.log('Error: Por favor completa todos los campos');
       return;
     }
 
@@ -183,11 +195,11 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
         resetForm();
         setSelectedTab('visualizar');
       } else {
-        Alert.alert('Error', 'No se pudo crear el evento');
+        console.log('Error: No se pudo crear el evento');
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Error al crear el evento';
-      Alert.alert('Error', errorMessage);
+      console.log('Error:', errorMessage);
     }
   };
 
@@ -196,10 +208,21 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
       <View style={styles.homeContainer}>
         <CommonHeader 
           onOpenNotifications={onOpenNotifications} 
+          onOpenMenu={onOpenMenu}
           activeStudent={getActiveStudent()}
         />
 
-        <ScrollView style={styles.scrollContainer}>
+        <ScrollView 
+          style={styles.scrollContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#0E5FCE']} // Color azul para Android
+              tintColor="#0E5FCE" // Color azul para iOS
+            />
+          }
+        >
           {/* Título EVENTOS */}
           <View style={styles.eventosTitle}>
             <Text style={styles.eventosTitleText}>EVENTOS</Text>
@@ -287,12 +310,14 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
                             
                             {/* Botones de autorización */}
                             <View style={styles.eventActionsContainer}>
-                              {/* Botón de autorización para familyadmin */}
-                              <EventAuthorizationButton
-                                eventId={event._id}
-                                eventTitle={event.titulo}
-                                requiereAutorizacion={event.requiereAutorizacion || false}
-                              />
+                              {/* Botón de autorización solo para familyadmin */}
+                              {isFamilyAdmin && (
+                                <EventAuthorizationButton
+                                  eventId={event._id}
+                                  eventTitle={event.titulo}
+                                  requiereAutorizacion={event.requiereAutorizacion || false}
+                                />
+                              )}
                               
                               {/* Botón de detalles para coordinadores en eventos que requieren autorización */}
                               {isCoordinador && event.requiereAutorizacion && (
@@ -406,52 +431,14 @@ const EventosScreen = ({ onOpenNotifications }: { onOpenNotifications: () => voi
       </View>
 
       {/* Selectores modales para fecha y hora */}
-      {showDatePicker && (
-        <Modal
-          visible={showDatePicker}
-          transparent={true}
-          animationType="slide"
-        >
-          <View style={styles.pickerOverlay}>
-            <View style={styles.pickerContainer}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Seleccionar Fecha</Text>
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                  <Text style={styles.pickerCloseText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <Picker
-                selectedValue={selectedDateValue}
-                onValueChange={(itemValue) => {
-                  const newDate = new Date(itemValue);
-                  setSelectedDate(newDate);
-                  setSelectedDateValue(itemValue);
-                  setEventoFecha(newDate.toLocaleDateString('es-ES', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  }));
-                }}
-              >
-                {generateDateOptions().map((option) => (
-                  <Picker.Item
-                    key={option.value}
-                    label={option.label}
-                    value={option.value}
-                  />
-                ))}
-              </Picker>
-              <TouchableOpacity
-                style={styles.pickerConfirmButton}
-                onPress={() => setShowDatePicker(false)}
-              >
-                <Text style={styles.pickerConfirmText}>Confirmar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
+      <MonthlyCalendar
+        visible={showDatePicker}
+        selectedDate={selectedDate}
+        onDateSelect={handleDateSelect}
+        onClose={() => setShowDatePicker(false)}
+        minDate={new Date()}
+        maxDate={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)} // 1 año desde hoy
+      />
 
       {showTimePicker && (
         <Modal
@@ -809,4 +796,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default EventosScreen; 
+export default withSideMenu(EventosScreen); 
