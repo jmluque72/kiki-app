@@ -17,6 +17,8 @@ import ActividadScreen from './ActividadScreen';
 import EventosScreen from './EventosScreen';
 import PerfilScreen from './PerfilScreen';
 import AlbumScreen from './AlbumScreen';
+import StudentActionsScreen from './StudentActionsScreen';
+import FamilyActionsCalendarScreen from './FamilyActionsCalendarScreen';
 
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -102,14 +104,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
     
     // Pestañas específicas por rol
     if (role === 'coordinador') {
-      // Coordinadores ven todas las pestañas: Inicio, Asistencia, Actividad, Eventos, Perfil
-      return ['Inicio', 'Asistencia', 'Actividad', 'Eventos', 'Perfil'];
+      // Coordinadores ven todas las pestañas: Inicio, Asistencia, Actividad, Acciones, Eventos, Perfil
+      return ['Inicio', 'Asistencia', 'Actividad', 'Acciones', 'Eventos', 'Perfil'];
     } else if (role === 'familyadmin') {
-      // Familyadmin ven: Inicio, Álbum, Eventos, Perfil (sin Asistencias)
-      return ['Inicio', 'Álbum', 'Eventos', 'Perfil'];
+      // Familyadmin ven: Inicio, Álbum, Acciones, Eventos, Perfil (sin Asistencias)
+      return ['Inicio', 'Álbum', 'Acciones', 'Eventos', 'Perfil'];
     } else if (role === 'familyviewer') {
-      // Familyviewer ven: Inicio, Álbum, Eventos, Perfil (sin Asistencias)
-      return ['Inicio', 'Álbum', 'Eventos', 'Perfil'];
+      // Familyviewer ven: Inicio, Álbum, Acciones, Eventos, Perfil (sin Asistencias)
+      return ['Inicio', 'Álbum', 'Acciones', 'Eventos', 'Perfil'];
     } else {
       // Para otros roles, solo mostrar pestañas base
       return baseTabs;
@@ -224,6 +226,33 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
           <Tab.Screen
             name="Actividad"
             component={() => <ActividadScreen onOpenNotifications={handleOpenNotifications} />}
+            options={{
+              headerShown: false,
+              tabBarIcon: ({ focused }) => (
+                <View style={styles.tabIconContainer}>
+                  <Image
+                    source={require('../assets/design/icons/kiki_tab_more.png')}
+                    style={[styles.tabIconImage, { tintColor: focused ? '#FF8C42' : '#FFFFFF' }]}
+                    resizeMode="contain"
+                  />
+                </View>
+              ),
+            }}
+          />
+        )}
+
+        {/* Pestaña Acciones - Para coordinadores y familias */}
+        {visibleTabs.includes('Acciones') && (
+          <Tab.Screen
+            name="Acciones"
+            component={() => {
+              const role = getUserRole();
+              if (role === 'coordinador') {
+                return <StudentActionsScreen />;
+              } else {
+                return <FamilyActionsCalendarScreen />;
+              }
+            }}
             options={{
               headerShown: false,
               tabBarIcon: ({ focused }) => (
