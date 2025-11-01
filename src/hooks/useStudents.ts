@@ -39,15 +39,19 @@ export const useStudents = (accountId?: string, divisionId?: string): UseStudent
   const [total, setTotal] = useState(0);
 
   const loadStudents = async (year?: number) => {
+    // Si no hay accountId, no hacer nada y no establecer error
+    if (!accountId) {
+      setStudents([]);
+      setTotal(0);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      if (!accountId) {
-        setStudents([]);
-        setTotal(0);
-        return;
-      }
 
       const params: any = {
         accountId
@@ -61,6 +65,15 @@ export const useStudents = (accountId?: string, divisionId?: string): UseStudent
         params.year = year;
       }
 
+      // CRÍTICO: Solo hacer la llamada si realmente hay accountId
+      if (!accountId) {
+        setStudents([]);
+        setTotal(0);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      
       const response = await apiClient.get('/students/by-account-division', { params });
 
       if (response.data.success) {
@@ -70,8 +83,16 @@ export const useStudents = (accountId?: string, divisionId?: string): UseStudent
         setError('Error al cargar los alumnos');
       }
     } catch (error: any) {
-      console.error('❌ Error cargando alumnos:', error);
-      setError(error.response?.data?.message || 'Error al cargar los alumnos');
+      // Solo establecer error si realmente hay un accountId válido
+      // Si no hay accountId, no deberíamos estar aquí, pero por seguridad...
+      if (accountId) {
+        console.error('❌ Error cargando alumnos:', error);
+        setError(error.response?.data?.message || 'Error al cargar los alumnos');
+      } else {
+        // Si no hay accountId, no establecer error
+        console.log('ℹ️ [USE STUDENTS] No hay accountId, no se intentó cargar');
+        setError(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -82,7 +103,26 @@ export const useStudents = (accountId?: string, divisionId?: string): UseStudent
   };
 
   useEffect(() => {
+    // VERIFICACIÓN ULTRA ESTRICTA: accountId debe ser string válido
+    const hasValidAccountId = accountId !== null &&
+                              accountId !== undefined &&
+                              typeof accountId === 'string' && 
+                              accountId.trim() !== '' && 
+                              accountId !== 'undefined' &&
+                              accountId !== 'null';
+    
+    // Si NO hay accountId válido, limpiar TODO inmediatamente y salir
+    if (!hasValidAccountId) {
+      setStudents([]);
+      setTotal(0);
+      setError(null); // CRÍTICO: NO establecer error
+      setLoading(false);
+      return; // SALIR INMEDIATAMENTE, no hacer nada más
+    }
+    
+    // Solo si hay accountId válido, cargar estudiantes
     loadStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, divisionId]);
 
   return {

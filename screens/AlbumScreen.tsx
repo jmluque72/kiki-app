@@ -49,8 +49,8 @@ interface FlatListItem {
 }
 
 const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () => void }> = ({ onOpenNotifications, onOpenMenu }) => {
-  const { user } = useAuth();
-  const { selectedInstitution, userAssociations } = useInstitution();
+  const { user, activeAssociation } = useAuth();
+  const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   const [favorites, setFavorites] = useState<FavoriteActivity[]>([]);
   const [groupedFavorites, setGroupedFavorites] = useState<StudentSection[]>([]);
   const [flatData, setFlatData] = useState<FlatListItem[]>([]);
@@ -60,19 +60,23 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedActivity, setSelectedActivity] = useState<FavoriteActivity | null>(null);
 
-  // Obtener el estudiante del usuario
+  // Obtener el estudiante del usuario (usar activeAssociation o getActiveStudent)
   const getUserStudent = () => {
+    // Priorizar la asociación activa
+    if (activeAssociation?.student?._id) {
+      return activeAssociation.student._id;
+    }
+    
+    // Fallback: usar getActiveStudent del contexto
+    const activeStudent = getActiveStudent();
+    if (activeStudent?._id) {
+      return activeStudent._id;
+    }
+    
+    // Fallback antiguo: buscar en userAssociations
     const association = userAssociations.find(assoc => 
       assoc.role?.nombre === 'familyadmin' || assoc.role?.nombre === 'familyviewer'
     );
-    
-    // console.log('🔍 [AlbumScreen] getUserStudent:', {
-    //   userAssociationsLength: userAssociations.length,
-    //   foundAssociation: !!association,
-    //   associationRole: association?.role?.nombre,
-    //   studentId: association?.student?._id,
-    //   studentName: association?.student?.nombre
-    // });
     
     return association?.student?._id;
   };
@@ -394,19 +398,12 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
     );
   };
 
-  // Obtener el estudiante activo para el header
-  const getActiveStudent = () => {
-    const association = userAssociations.find(assoc => 
-      assoc.role?.nombre === 'familyadmin' || assoc.role?.nombre === 'familyviewer'
-    );
-    return association?.student || null;
-  };
-
   if (loading) {
     return (
       <View style={styles.container}>
         <CommonHeader 
-          onOpenNotifications={onOpenNotifications} 
+          onOpenNotifications={onOpenNotifications}
+          onOpenMenu={onOpenMenu}
           activeStudent={getActiveStudent()}
         />
         <View style={styles.loadingContainer}>
@@ -421,7 +418,8 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
     return (
       <View style={styles.container}>
         <CommonHeader 
-          onOpenNotifications={onOpenNotifications} 
+          onOpenNotifications={onOpenNotifications}
+          onOpenMenu={onOpenMenu}
           activeStudent={getActiveStudent()}
         />
         <View style={styles.emptyContainer}>
@@ -438,7 +436,8 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
   return (
     <View style={styles.container}>
       <CommonHeader 
-        onOpenNotifications={onOpenNotifications} 
+        onOpenNotifications={onOpenNotifications}
+        onOpenMenu={onOpenMenu}
         activeStudent={getActiveStudent()}
       />
       

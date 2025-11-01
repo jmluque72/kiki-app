@@ -22,11 +22,14 @@ import { useCustomAlert } from '../src/hooks/useCustomAlert';
 import CustomAlert from '../components/CustomAlert';
 import CameraKitQRScanner from '../components/CameraKitQRScanner';
 
-const AsistenciaScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
+const AsistenciaScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp }: { onOpenNotifications: () => void; onOpenMenu?: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   const { token } = useAuth();
   const { showSuccess, showError, isVisible, alertConfig } = useCustomAlert();
-  const { showMenu, openMenu, closeMenu } = useSideMenu();
+  const { showMenu, openMenu: openMenuLocal, closeMenu } = useSideMenu();
+  
+  // Usar onOpenMenu prop si está disponible, sino usar el hook local
+  const openMenu = onOpenMenuProp || openMenuLocal;
   
   const { students, loading, error, total } = useStudents(
     selectedInstitution?.account._id,

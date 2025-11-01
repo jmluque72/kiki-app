@@ -37,7 +37,7 @@ interface StudentAttendance {
   attendances: AttendanceRecord[];
 }
 
-const FamilyAttendanceScreen = ({ onOpenNotifications }: { onOpenNotifications: () => void }) => {
+const FamilyAttendanceScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications: () => void; onOpenMenu?: () => void }) => {
   const { user } = useAuth();
   const { selectedInstitution, userAssociations } = useInstitution();
   const { showError, showSuccess } = useCustomAlert();
@@ -160,7 +160,8 @@ const FamilyAttendanceScreen = ({ onOpenNotifications }: { onOpenNotifications: 
     return (
       <View style={styles.container}>
         <CommonHeader 
-          onOpenNotifications={onOpenNotifications} 
+          onOpenNotifications={onOpenNotifications}
+          onOpenMenu={onOpenMenu}
           activeStudent={activeStudent}
         />
         <View style={styles.errorContainer}>

@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Text,
-  FlatList
+  FlatList,
+  Platform
 } from 'react-native';
 import { Video } from 'react-native-video';
 import { getMediaType } from '../src/utils/mediaUtils';
@@ -49,6 +50,7 @@ const ImageFullScreen: React.FC<ImageFullScreenProps> = ({
   activityDescription
 }) => {
   const [loading, setLoading] = useState(false);
+  const [videoLoading, setVideoLoading] = useState<{ [key: number]: boolean }>({});
 
   const handleToggleFavorite = async () => {
     if (loading) return;
@@ -159,17 +161,72 @@ const ImageFullScreen: React.FC<ImageFullScreenProps> = ({
                 bounces={false}
               >
                 {mediaType === 'video' ? (
-                  <Video
-                    source={{ uri: item }}
-                    style={styles.video}
-                    resizeMode="contain"
-                    controls={true}
-                    paused={false}
-                    repeat={false}
-                    onError={(error) => {
-                      console.error('Video error:', error);
-                    }}
-                  />
+                  <View style={styles.videoWrapper}>
+                    {videoLoading[currentIndex] && (
+                      <View style={styles.videoLoadingContainer}>
+                        <ActivityIndicator size="large" color="#FFFFFF" />
+                        <Text style={styles.videoLoadingText}>Cargando video...</Text>
+                      </View>
+                    )}
+                    <Video
+                      source={{ 
+                        uri: item,
+                        headers: Platform.OS === 'android' ? {
+                          'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36',
+                          'Accept': '*/*',
+                          'Accept-Encoding': 'identity',
+                        } : undefined
+                      }}
+                      style={styles.video}
+                      resizeMode="contain"
+                      controls={true}
+                      paused={false}
+                      repeat={false}
+                      playInBackground={false}
+                      playWhenInactive={false}
+                      ignoreSilentSwitch="ignore"
+                      useTextureView={Platform.OS === 'android'} // Mejor rendimiento en Android
+                      allowsExternalPlayback={false}
+                      progressUpdateInterval={1000}
+                      onError={(error) => {
+                        console.error('❌ [VIDEO] Error reproduciendo video:', error);
+                        console.error('❌ [VIDEO] Error details:', {
+                          errorCode: error.error?.errorCode,
+                          errorString: error.error?.errorString,
+                          errorType: error.error?.errorType,
+                          uri: item,
+                          platform: Platform.OS
+                        });
+                        setVideoLoading({ ...videoLoading, [currentIndex]: false });
+                        // Mostrar mensaje de error al usuario
+                        toastService.error('Error', `No se pudo reproducir el video en ${Platform.OS === 'android' ? 'Android' : 'iOS'}. Verifica que el formato sea compatible.`);
+                      }}
+                      onLoadStart={() => {
+                        console.log('📹 [VIDEO] Iniciando carga del video:', item);
+                        setVideoLoading({ ...videoLoading, [currentIndex]: true });
+                      }}
+                      onLoad={(data) => {
+                        console.log('✅ [VIDEO] Video cargado exitosamente:', {
+                          duration: data.duration,
+                          naturalSize: data.naturalSize,
+                          width: data.naturalSize?.width,
+                          height: data.naturalSize?.height,
+                          uri: item,
+                          platform: Platform.OS
+                        });
+                        setVideoLoading({ ...videoLoading, [currentIndex]: false });
+                      }}
+                      onBuffer={({ isBuffering }) => {
+                        if (isBuffering) {
+                          console.log('⏳ [VIDEO] Buffering...');
+                        }
+                      }}
+                      onReadyForDisplay={() => {
+                        console.log('✅ [VIDEO] Video listo para mostrar');
+                        setVideoLoading({ ...videoLoading, [currentIndex]: false });
+                      }}
+                    />
+                  </View>
                 ) : (
                   <Image
                     source={{ uri: item }}
@@ -316,9 +373,32 @@ const styles = StyleSheet.create({
     width: width,
     height: height,
   },
+  videoWrapper: {
+    width: width,
+    height: height,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   video: {
     width: width,
     height: height,
+  },
+  videoLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 1,
+  },
+  videoLoadingText: {
+    color: '#FFFFFF',
+    marginTop: 10,
+    fontSize: 16,
   },
   swipeLeftArea: {
     position: 'absolute',

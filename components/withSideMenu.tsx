@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { View, Modal, StyleSheet } from 'react-native';
 import { useSideMenu } from '../src/hooks/useSideMenu';
+import { useAuth } from '../contexts/AuthContextHybrid';
 import SideMenu from './SideMenu';
 import AssociationsScreen from '../screens/AssociationsScreen';
 import QuienRetiraScreen from '../screens/QuienRetiraScreen';
 import AcercaDeScreen from '../screens/AcercaDeScreen';
 import TerminosCondicionesScreen from '../screens/TerminosCondicionesScreen';
+import StudentActionsScreen from '../src/screens/StudentActionsScreen';
+import FamilyActionsCalendarScreen from '../src/screens/FamilyActionsCalendarScreen';
 
 /**
  * Higher-Order Component que agrega funcionalidad de menú hamburguesa
@@ -16,10 +19,30 @@ const withSideMenu = <P extends object>(
 ) => {
   const WithSideMenuComponent = (props: P) => {
     const { showMenu, openMenu, closeMenu } = useSideMenu();
-  const [showAssociations, setShowAssociations] = useState(false);
-  const [showQuienRetira, setShowQuienRetira] = useState(false);
-  const [showAcercaDe, setShowAcercaDe] = useState(false);
-  const [showTerminosCondiciones, setShowTerminosCondiciones] = useState(false);
+    const { user, activeAssociation } = useAuth();
+    const [showAssociations, setShowAssociations] = useState(false);
+    const [showQuienRetira, setShowQuienRetira] = useState(false);
+    const [showAcercaDe, setShowAcercaDe] = useState(false);
+    const [showTerminosCondiciones, setShowTerminosCondiciones] = useState(false);
+    const [showAcciones, setShowAcciones] = useState(false);
+    
+    // Determinar qué pantalla de acciones mostrar según el rol
+    const getUserRole = () => {
+      if (activeAssociation?.role) {
+        return activeAssociation.role.nombre || activeAssociation.role;
+      }
+      return user?.role?.nombre || '';
+    };
+    
+    const getAccionesScreen = () => {
+      const role = getUserRole();
+      if (role === 'coordinador') {
+        return <StudentActionsScreen onBack={() => setShowAcciones(false)} />;
+      } else {
+        // Para familyadmin y familyviewer
+        return <FamilyActionsCalendarScreen onBack={() => setShowAcciones(false)} />;
+      }
+    };
     
 
     // Solo agregar onOpenMenu si el componente lo necesita
@@ -67,6 +90,10 @@ const withSideMenu = <P extends object>(
                          closeMenu();
                          setShowTerminosCondiciones(true);
                        }}
+                       onOpenAcciones={() => {
+                         closeMenu();
+                         setShowAcciones(true);
+                       }}
             />
             </View>
           </View>
@@ -110,6 +137,16 @@ const withSideMenu = <P extends object>(
           onRequestClose={() => setShowTerminosCondiciones(false)}
         >
           <TerminosCondicionesScreen onBack={() => setShowTerminosCondiciones(false)} />
+        </Modal>
+
+        {/* Modal de Acciones */}
+        <Modal
+          visible={showAcciones}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => setShowAcciones(false)}
+        >
+          {getAccionesScreen()}
         </Modal>
       </>
     );

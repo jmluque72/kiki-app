@@ -97,11 +97,25 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
       } else if (response.assets && response.assets[0]) {
         const asset = response.assets[0];
         
-        // Validar tamaño de videos (máximo 10MB)
+        // Validar videos
         if (asset.type?.startsWith('video/')) {
+          // Validar duración (máximo 30 segundos)
+          const durationSeconds = asset.duration ? asset.duration / 1000 : 0; // duration viene en milisegundos
+          if (durationSeconds > 30) {
+            showError(
+              'Video demasiado largo',
+              `El video tiene ${Math.round(durationSeconds)} segundos. El límite máximo es de 30 segundos. Por favor, selecciona un video más corto.`
+            );
+            return;
+          }
+          
+          // Validar tamaño de videos (máximo 10MB)
           const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
           if (fileSizeMB > 10) {
-            console.warn(`Video es demasiado grande: ${fileSizeMB.toFixed(2)}MB (máximo 10MB)`);
+            showError(
+              'Video demasiado pesado',
+              `El video pesa ${fileSizeMB.toFixed(2)}MB. El límite máximo es de 10MB. Por favor, selecciona un video más liviano o comprímelo antes de subirlo.`
+            );
             return;
           }
           
@@ -130,17 +144,45 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
         console.log('Error de galería:', response.error);
         console.log('Error: No se pudo abrir la galería');
       } else if (response.assets) {
-        // Validar tamaño de videos (máximo 10MB)
-        const validAssets = response.assets.filter(asset => {
+        // Validar videos
+        const validAssets = [];
+        const rejectedVideos = [];
+        
+        for (const asset of response.assets) {
           if (asset.type?.startsWith('video/')) {
+            // Validar duración (máximo 30 segundos)
+            const durationSeconds = asset.duration ? asset.duration / 1000 : 0; // duration viene en milisegundos
+            if (durationSeconds > 30) {
+              rejectedVideos.push({
+                fileName: asset.fileName || 'Video',
+                reason: `duración (${Math.round(durationSeconds)} segundos, máximo 30)`
+              });
+              continue;
+            }
+            
+            // Validar tamaño de videos (máximo 10MB)
             const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
             if (fileSizeMB > 10) {
-              console.warn(`Video ${asset.fileName} es demasiado grande: ${fileSizeMB.toFixed(2)}MB (máximo 10MB)`);
-              return false;
+              rejectedVideos.push({
+                fileName: asset.fileName || 'Video',
+                reason: `tamaño (${fileSizeMB.toFixed(2)}MB, máximo 10MB)`
+              });
+              continue;
             }
           }
-          return true;
-        });
+          
+          validAssets.push(asset);
+        }
+        
+        // Mostrar mensajes de error para videos rechazados
+        if (rejectedVideos.length > 0) {
+          const videoNames = rejectedVideos.map(v => v.fileName).join(', ');
+          const reasons = rejectedVideos.map(v => `${v.fileName}: ${v.reason}`).join('\n');
+          showError(
+            `${rejectedVideos.length} video${rejectedVideos.length > 1 ? 's' : ''} rechazado${rejectedVideos.length > 1 ? 's' : ''}`,
+            `Los siguientes videos no se pudieron agregar:\n${reasons}\n\nPor favor, selecciona videos más cortos (máximo 30 segundos) y más livianos (máximo 10MB).`
+          );
+        }
         
         setSelectedImages(prev => [...prev, ...validAssets]);
       }
@@ -482,12 +524,16 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
       if (videos.length > 0) {
         console.log('📹 [ACTIVIDAD] ===== PROCESANDO VIDEOS =====');
         
-        // Filtrar videos válidos por tamaño
-        const validVideos = filterValidVideos(videos, 10);
-        console.log('📹 [ACTIVIDAD] Videos válidos:', validVideos.length);
+        // Filtrar videos válidos por duración y tamaño
+        const validVideos = filterValidVideos(videos, 30, 10);
+        console.log('📹 [ACTIVIDAD] Videos válidos:', validVideos.length, 'de', videos.length);
         
         if (validVideos.length !== videos.length) {
-          console.warn('⚠️ [ACTIVIDAD] Algunos videos fueron rechazados por tamaño');
+          const rejectedCount = videos.length - validVideos.length;
+          showError(
+            `${rejectedCount} video${rejectedCount > 1 ? 's' : ''} rechazado${rejectedCount > 1 ? 's' : ''}`,
+            `Algunos videos no cumplen con los requisitos:\n- Duración máxima: 30 segundos\n- Tamaño máximo: 10MB`
+          );
         }
 
         const formDataArray = prepareVideosForUpload(validVideos);
@@ -1192,4 +1238,5 @@ const styles = StyleSheet.create({
   },
 });
 
+export default withSideMenu(ActividadScreen); 
 export default withSideMenu(ActividadScreen); 

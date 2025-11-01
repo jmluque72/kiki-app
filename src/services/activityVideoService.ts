@@ -63,6 +63,28 @@ export const prepareVideosForUpload = (videos: any[]) => {
 };
 
 /**
+ * Valida la duración de un video
+ * @param video - Objeto de video
+ * @param maxDurationSeconds - Duración máxima en segundos (por defecto 30)
+ * @returns true si el video es válido, false si es demasiado largo
+ */
+export const validateVideoDuration = (video: any, maxDurationSeconds: number = 30): boolean => {
+  if (!video.duration) {
+    console.warn('📹 [ACTIVITY VIDEO] No se pudo determinar la duración del video');
+    return true; // Permitir si no se puede determinar la duración
+  }
+  
+  const durationSeconds = video.duration / 1000; // duration viene en milisegundos
+  const isValid = durationSeconds <= maxDurationSeconds;
+  
+  if (!isValid) {
+    console.warn(`📹 [ACTIVITY VIDEO] Video demasiado largo: ${Math.round(durationSeconds)} segundos (máximo ${maxDurationSeconds} segundos)`);
+  }
+  
+  return isValid;
+};
+
+/**
  * Valida el tamaño de un video
  * @param video - Objeto de video
  * @param maxSizeMB - Tamaño máximo en MB (por defecto 10MB)
@@ -85,11 +107,15 @@ export const validateVideoSize = (video: any, maxSizeMB: number = 10): boolean =
 };
 
 /**
- * Filtra videos válidos por tamaño
+ * Filtra videos válidos por duración y tamaño
  * @param videos - Array de videos
+ * @param maxDurationSeconds - Duración máxima en segundos (por defecto 30)
  * @param maxSizeMB - Tamaño máximo en MB (por defecto 10MB)
  * @returns Array de videos válidos
  */
-export const filterValidVideos = (videos: any[], maxSizeMB: number = 10): any[] => {
-  return videos.filter(video => validateVideoSize(video, maxSizeMB));
+export const filterValidVideos = (videos: any[], maxDurationSeconds: number = 30, maxSizeMB: number = 10): any[] => {
+  return videos.filter(video => 
+    validateVideoDuration(video, maxDurationSeconds) && 
+    validateVideoSize(video, maxSizeMB)
+  );
 };

@@ -9,9 +9,9 @@ import {
   FlatList,
   ActivityIndicator,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContextHybrid';
-import { useInstitution } from '../contexts/InstitutionContext';
-import { apiClient } from '../src/services/api';
+import { useAuth } from '../../contexts/AuthContextHybrid';
+import { useInstitution } from '../../contexts/InstitutionContext';
+import { apiClient } from '../services/api';
 
 interface Student {
   _id: string;
@@ -55,53 +55,60 @@ interface CalendarDay {
   actions: StudentActionLog[];
 }
 
-const FamilyActionsCalendarScreen: React.FC = () => {
+interface FamilyActionsCalendarScreenProps {
+  onBack?: () => void;
+}
+
+// ESTA PANTALLA ES SOLO PARA ROLES FAMILIARES (familyadmin, familyviewer)
+// NO carga estudiantes desde API, usa las asociaciones del usuario
+const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = ({ onBack }) => {
   const { user, activeAssociation } = useAuth();
-  const { selectedInstitution, getActiveStudent } = useInstitution();
+  const { userAssociations } = useInstitution();
   
-  const [students, setStudents] = useState<Student[]>([]);
+  // Obtener estudiantes desde las asociaciones del usuario (NO desde API)
+  const students = React.useMemo(() => {
+    const familyStudents: Student[] = [];
+    userAssociations.forEach(assoc => {
+      if (assoc.student && (assoc.role?.nombre === 'familyadmin' || assoc.role?.nombre === 'familyviewer')) {
+        familyStudents.push({
+          _id: assoc.student._id,
+          nombre: assoc.student.nombre,
+          apellido: assoc.student.apellido || '',
+          avatar: assoc.student.avatar
+        });
+      }
+    });
+    console.log('👨‍👩‍👧 [FAMILY ACTIONS] Estudiantes de asociaciones:', familyStudents.length);
+    return familyStudents;
+  }, [userAssociations]);
+  
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dayActions, setDayActions] = useState<StudentActionLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
+  // Solo vista de semana
+  const viewMode: 'week' = 'week';
 
+  // Seleccionar el primer estudiante automáticamente
   useEffect(() => {
-    loadStudents();
-  }, []);
+    if (students.length > 0 && !selectedStudent) {
+      setSelectedStudent(students[0]);
+    }
+  }, [students]);
 
   useEffect(() => {
     if (selectedStudent) {
       loadCalendarData();
     }
-  }, [selectedStudent, currentDate, viewMode]);
+  }, [selectedStudent, currentDate]);
 
   useEffect(() => {
-    if (selectedDate && selectedStudent) {
+    if (selectedDate && students.length > 0) {
       loadDayActions();
     }
-  }, [selectedDate, selectedStudent]);
-
-  const loadStudents = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get(`/api/students?accountId=${selectedInstitution?._id}&divisionId=${activeAssociation?.division?._id}`);
-      const studentsData = response.data.data.students || [];
-      setStudents(studentsData);
-      
-      // Si hay estudiantes, seleccionar el primero por defecto
-      if (studentsData.length > 0) {
-        setSelectedStudent(studentsData[0]);
-      }
-    } catch (error) {
-      console.error('Error cargando estudiantes:', error);
-      Alert.alert('Error', 'No se pudieron cargar los estudiantes');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [selectedDate, students]);
 
   const loadCalendarData = async () => {
     if (!selectedStudent) return;
@@ -109,20 +116,27 @@ const FamilyActionsCalendarScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      const startDate = viewMode === 'week' 
-        ? getWeekStart(currentDate)
-        : getMonthStart(currentDate);
-      
-      const endDate = viewMode === 'week'
-        ? getWeekEnd(currentDate)
-        : getMonthEnd(currentDate);
+      // Solo vista de semana
+      const startDate = getWeekStart(currentDate);
+      const endDate = getWeekEnd(currentDate);
 
-      const response = await apiClient.get(
-        `/api/student-actions/log/student/${selectedStudent._id}?fechaInicio=${startDate}&fechaFin=${endDate}`
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+
+      // Cargar acciones de TODOS los estudiantes de las asociaciones
+      const promises = students.map(student => 
+        apiClient.get(
+          `/api/student-actions/log/student/${student._id}?fechaInicio=${startDateStr}&fechaFin=${endDateStr}`
+        ).catch(err => {
+          console.error(`❌ [FAMILY ACTIONS] Error cargando acciones para estudiante ${student._id}:`, err);
+          return { data: { data: [] } };
+        })
       );
       
-      const actions = response.data.data || [];
-      generateCalendarDays(startDate, endDate, actions);
+      const responses = await Promise.all(promises);
+      const allActions = responses.flatMap(r => r.data.data || []);
+      
+      generateCalendarDays(startDate, endDate, allActions);
       
     } catch (error) {
       console.error('Error cargando datos del calendario:', error);
@@ -133,15 +147,38 @@ const FamilyActionsCalendarScreen: React.FC = () => {
   };
 
   const loadDayActions = async () => {
-    if (!selectedStudent) return;
+    if (students.length === 0) {
+      setDayActions([]);
+      return;
+    }
 
     try {
-      const response = await apiClient.get(
-        `/api/student-actions/log/student/${selectedStudent._id}?fecha=${selectedDate}`
+      // Cargar acciones de TODOS los estudiantes para el día seleccionado
+      const promises = students.map(student => 
+        apiClient.get(
+          `/api/student-actions/log/student/${student._id}?fechaInicio=${selectedDate}&fechaFin=${selectedDate}`
+        ).catch(err => {
+          console.error(`❌ [FAMILY ACTIONS] Error cargando acciones del día para estudiante ${student._id}:`, err);
+          return { data: { data: [] } };
+        })
       );
-      setDayActions(response.data.data || []);
+      
+      const responses = await Promise.all(promises);
+      const allDayActions = responses.flatMap(r => r.data.data || []);
+      
+      // Filtrar acciones para asegurar que sean solo del día seleccionado (normalizando fechas)
+      const filteredActions = allDayActions.filter(action => {
+        if (!action.fechaAccion) return false;
+        const actionDate = new Date(action.fechaAccion);
+        const actionDateStr = actionDate.toISOString().split('T')[0];
+        return actionDateStr === selectedDate;
+      });
+      
+      console.log('📅 [FAMILY ACTIONS] Día seleccionado:', selectedDate, 'Acciones encontradas:', filteredActions.length);
+      setDayActions(filteredActions);
     } catch (error) {
       console.error('Error cargando acciones del día:', error);
+      setDayActions([]);
     }
   };
 
@@ -191,11 +228,8 @@ const FamilyActionsCalendarScreen: React.FC = () => {
 
   const navigateDate = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
-    if (viewMode === 'week') {
-      newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
-    } else {
-      newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
-    }
+    // Solo navegación por semanas
+    newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
     setCurrentDate(newDate);
   };
 
@@ -283,20 +317,41 @@ const FamilyActionsCalendarScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Calendario de Acciones</Text>
+      {/* Header con botón de volver */}
+      {onBack && (
+        <View style={styles.headerContainer}>
+          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <Text style={styles.backButtonText}>← Volver</Text>
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Calendario de Acciones</Text>
+          </View>
+          <View style={styles.backButtonPlaceholder} />
+        </View>
+      )}
       
-      {/* Selector de estudiante */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Seleccionar Estudiante</Text>
-        <FlatList
-          data={students}
-          renderItem={renderStudent}
-          keyExtractor={(item) => item._id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.studentsList}
-        />
-      </View>
+      {!onBack && (
+        <Text style={styles.title}>Calendario de Acciones</Text>
+      )}
+      
+      {/* Selector de estudiante - Solo si hay más de uno */}
+      {students.length > 1 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Seleccionar Estudiante</Text>
+          <FlatList
+            data={students}
+            renderItem={renderStudent}
+            keyExtractor={(item) => item._id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.studentsList}
+          />
+        </View>
+      ) : students.length === 1 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Estudiante: {students[0]?.nombre} {students[0]?.apellido}</Text>
+        </View>
+      ) : null}
 
       {/* Controles de navegación */}
       <View style={styles.navigationControls}>
@@ -311,24 +366,6 @@ const FamilyActionsCalendarScreen: React.FC = () => {
           <Text style={styles.dateText}>
             {formatDate(currentDate)}
           </Text>
-          <View style={styles.viewModeButtons}>
-            <TouchableOpacity
-              style={[styles.viewModeButton, viewMode === 'week' && styles.activeViewMode]}
-              onPress={() => setViewMode('week')}
-            >
-              <Text style={[styles.viewModeText, viewMode === 'week' && styles.activeViewModeText]}>
-                Semana
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.viewModeButton, viewMode === 'month' && styles.activeViewMode]}
-              onPress={() => setViewMode('month')}
-            >
-              <Text style={[styles.viewModeText, viewMode === 'month' && styles.activeViewModeText]}>
-                Mes
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
         
         <TouchableOpacity
@@ -339,15 +376,41 @@ const FamilyActionsCalendarScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Calendario */}
+      {/* Calendario Semanal */}
       <View style={styles.calendarContainer}>
-        <FlatList
-          data={calendarDays}
-          renderItem={renderCalendarDay}
-          keyExtractor={(item) => item.date}
-          numColumns={7}
-          scrollEnabled={false}
-        />
+        <View style={styles.weekHeader}>
+          {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day, index) => (
+            <View key={index} style={styles.weekHeaderDay}>
+              <Text style={styles.weekHeaderText}>{day}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={styles.weekDays}>
+          {calendarDays.map((day) => (
+            <TouchableOpacity
+              key={day.date}
+              style={[
+                styles.calendarDay,
+                day.isToday && styles.todayDay,
+                selectedDate === day.date && styles.selectedDay,
+              ]}
+              onPress={() => setSelectedDate(day.date)}
+            >
+              <Text style={[
+                styles.dayNumber,
+                day.isToday && styles.todayText,
+                selectedDate === day.date && styles.selectedText,
+              ]}>
+                {day.day}
+              </Text>
+              {day.actions.length > 0 && (
+                <View style={styles.actionsIndicator}>
+                  <Text style={styles.actionsCount}>{day.actions.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Acciones del día seleccionado */}
@@ -379,10 +442,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     padding: 16,
   },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    marginHorizontal: -16,
+    marginTop: -16,
+  },
+  backButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 80,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#0E5FCE',
+    fontWeight: '600',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: -1,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0E5FCE',
+    textAlign: 'center',
+  },
+  backButtonPlaceholder: {
+    minWidth: 80,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#0E5FCE',
+    marginTop: 60,
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -474,37 +579,62 @@ const styles = StyleSheet.create({
   },
   calendarContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 8,
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 20,
   },
-  calendarDay: {
+  weekHeader: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    paddingBottom: 8,
+  },
+  weekHeaderDay: {
     flex: 1,
+    alignItems: 'center',
+  },
+  weekHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    textTransform: 'uppercase',
+  },
+  weekDays: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: '14.28%',
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 2,
-    borderRadius: 4,
+    padding: 4,
+    borderRadius: 8,
     position: 'relative',
   },
   todayDay: {
-    backgroundColor: '#0E5FCE20',
+    backgroundColor: '#0E5FCE',
   },
   selectedDay: {
-    backgroundColor: '#0E5FCE',
+    backgroundColor: '#E3F2FD',
   },
   otherMonthDay: {
     opacity: 0.3,
   },
   dayNumber: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#333',
   },
   otherMonthText: {
     color: '#999',
   },
   todayText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  selectedText: {
     color: '#0E5FCE',
     fontWeight: 'bold',
   },
@@ -512,17 +642,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 2,
     right: 2,
-    backgroundColor: '#FF5722',
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
+    backgroundColor: '#FF9800',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionsCount: {
-    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   actionsList: {
     maxHeight: 400,

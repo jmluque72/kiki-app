@@ -45,8 +45,8 @@ const EyeIcon = ({ size = 20, isVisible = false }: { size?: number; isVisible?: 
 );
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
-  const [email, setEmail] = useState('matilanzaco@solvoglobal.com');
-  const [password, setPassword] = useState('Matute123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { showLoading, hideLoading } = useLoading();
@@ -139,7 +139,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
-              autoComplete="email"
+              autoComplete="off"
+              autoCorrect={false}
               placeholderTextColor="#B3D4F1"
               selectionColor="#FFFFFF"
               onFocus={() => setFocusedField('email')}
@@ -164,7 +165,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
-                autoComplete="password"
+                autoComplete="off"
+                autoCorrect={false}
                 placeholderTextColor="#B3D4F1"
                 selectionColor="#FFFFFF"
                 onFocus={() => setFocusedField('password')}

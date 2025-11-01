@@ -4,7 +4,8 @@ import {
   Text,
   Image,
   StyleSheet,
-  TouchableOpacity
+  TouchableOpacity,
+  Modal
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import NotificationCenter from '../components/NotificationCenter';
@@ -17,11 +18,17 @@ import ActividadScreen from './ActividadScreen';
 import EventosScreen from './EventosScreen';
 import PerfilScreen from './PerfilScreen';
 import AlbumScreen from './AlbumScreen';
-import StudentActionsScreen from './StudentActionsScreen';
-import FamilyActionsCalendarScreen from './FamilyActionsCalendarScreen';
 
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
+import { useSideMenu } from '../src/hooks/useSideMenu';
+import SideMenu from '../components/SideMenu';
+import AssociationsScreen from './AssociationsScreen';
+import QuienRetiraScreen from './QuienRetiraScreen';
+import AcercaDeScreen from './AcercaDeScreen';
+import TerminosCondicionesScreen from './TerminosCondicionesScreen';
+import StudentActionsScreen from '../src/screens/StudentActionsScreen';
+import FamilyActionsCalendarScreen from '../src/screens/FamilyActionsCalendarScreen';
 // import PushNotificationService from '../src/services/pushNotificationService';
 
 const Tab = createBottomTabNavigator();
@@ -33,8 +40,14 @@ interface HomeScreenProps {
 const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
   const { user, activeAssociation } = useAuth();
   const { selectedInstitution, userAssociations, getActiveInstitution } = useInstitution();
+  const { showMenu, openMenu, closeMenu } = useSideMenu();
   const [notificationCenterVisible, setNotificationCenterVisible] = useState(false);
   const [showInstitutionSelector, setShowInstitutionSelector] = useState(false);
+  const [showAssociations, setShowAssociations] = useState(false);
+  const [showQuienRetira, setShowQuienRetira] = useState(false);
+  const [showAcercaDe, setShowAcercaDe] = useState(false);
+  const [showTerminosCondiciones, setShowTerminosCondiciones] = useState(false);
+  const [showAcciones, setShowAcciones] = useState(false);
   
   // Re-renderizar cuando cambie la asociación activa
   useEffect(() => {
@@ -104,14 +117,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
     
     // Pestañas específicas por rol
     if (role === 'coordinador') {
-      // Coordinadores ven todas las pestañas: Inicio, Asistencia, Actividad, Acciones, Eventos, Perfil
-      return ['Inicio', 'Asistencia', 'Actividad', 'Acciones', 'Eventos', 'Perfil'];
+      // Coordinadores ven todas las pestañas: Inicio, Asistencia, Actividad, Eventos, Perfil
+      return ['Inicio', 'Asistencia', 'Actividad', 'Eventos', 'Perfil'];
     } else if (role === 'familyadmin') {
-      // Familyadmin ven: Inicio, Álbum, Acciones, Eventos, Perfil (sin Asistencias)
-      return ['Inicio', 'Álbum', 'Acciones', 'Eventos', 'Perfil'];
+      // Familyadmin ven: Inicio, Álbum, Eventos, Perfil (sin Asistencias)
+      return ['Inicio', 'Álbum', 'Eventos', 'Perfil'];
     } else if (role === 'familyviewer') {
-      // Familyviewer ven: Inicio, Álbum, Acciones, Eventos, Perfil (sin Asistencias)
-      return ['Inicio', 'Álbum', 'Acciones', 'Eventos', 'Perfil'];
+      // Familyviewer ven: Inicio, Álbum, Eventos, Perfil (sin Asistencias)
+      return ['Inicio', 'Álbum', 'Eventos', 'Perfil'];
     } else {
       // Para otros roles, solo mostrar pestañas base
       return baseTabs;
@@ -166,7 +179,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {/* Pestaña Inicio - Siempre visible */}
         <Tab.Screen
           name="Inicio"
-          component={() => <InicioScreen onOpenNotifications={handleOpenNotifications} />}
+          component={() => <InicioScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} />}
           options={{
             headerShown: false,
             tabBarIcon: ({ focused }) => (
@@ -185,7 +198,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {visibleTabs.includes('Asistencias') && (
           <Tab.Screen
             name="Asistencias"
-            component={() => <FamilyAttendanceScreen onOpenNotifications={handleOpenNotifications} />}
+            component={() => <FamilyAttendanceScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} />}
             options={{
               headerShown: false,
               tabBarIcon: ({ focused }) => (
@@ -205,7 +218,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {visibleTabs.includes('Asistencia') && (
           <Tab.Screen
             name="Asistencia"
-            component={() => <AsistenciaScreen onOpenNotifications={handleOpenNotifications} />}
+            component={() => <AsistenciaScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} />}
             options={{
               headerShown: false,
               tabBarIcon: ({ focused }) => (
@@ -225,34 +238,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {visibleTabs.includes('Actividad') && (
           <Tab.Screen
             name="Actividad"
-            component={() => <ActividadScreen onOpenNotifications={handleOpenNotifications} />}
-            options={{
-              headerShown: false,
-              tabBarIcon: ({ focused }) => (
-                <View style={styles.tabIconContainer}>
-                  <Image
-                    source={require('../assets/design/icons/kiki_tab_more.png')}
-                    style={[styles.tabIconImage, { tintColor: focused ? '#FF8C42' : '#FFFFFF' }]}
-                    resizeMode="contain"
-                  />
-                </View>
-              ),
-            }}
-          />
-        )}
-
-        {/* Pestaña Acciones - Para coordinadores y familias */}
-        {visibleTabs.includes('Acciones') && (
-          <Tab.Screen
-            name="Acciones"
-            component={() => {
-              const role = getUserRole();
-              if (role === 'coordinador') {
-                return <StudentActionsScreen />;
-              } else {
-                return <FamilyActionsCalendarScreen />;
-              }
-            }}
+            component={() => <ActividadScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} />}
             options={{
               headerShown: false,
               tabBarIcon: ({ focused }) => (
@@ -272,7 +258,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {visibleTabs.includes('Álbum') && (
           <Tab.Screen
             name="Álbum"
-            component={() => <AlbumScreen onOpenNotifications={handleOpenNotifications} />}
+            component={() => <AlbumScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} />}
             options={{
               headerShown: false,
               tabBarIcon: ({ focused }) => (
@@ -292,7 +278,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {visibleTabs.includes('Eventos') && (
           <Tab.Screen
             name="Eventos"
-            component={() => <EventosScreen onOpenNotifications={handleOpenNotifications} />}
+            component={() => <EventosScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} />}
             options={{
               headerShown: false,
               tabBarIcon: ({ focused }) => (
@@ -311,7 +297,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {/* Pestaña Perfil - Siempre visible */}
         <Tab.Screen
           name="Perfil"
-          component={() => <PerfilScreen onOpenNotifications={handleOpenNotifications} onOpenActiveAssociation={onOpenActiveAssociation} />}
+          component={() => <PerfilScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} onOpenActiveAssociation={onOpenActiveAssociation} />}
           options={{
             headerShown: false,
             tabBarIcon: ({ focused }) => (
@@ -347,6 +333,114 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
       {showInstitutionSelector && (
         <InstitutionSelector onInstitutionSelected={handleInstitutionSelected} />
       )}
+
+      {/* Modal del menú lateral global */}
+      <Modal
+        visible={showMenu}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeMenu}
+      >
+        <View style={styles.menuModalOverlay}>
+          {/* Overlay para cerrar el menú tocando fuera */}
+          <View style={styles.overlayTouchable} onTouchEnd={closeMenu} />
+          
+          <View style={styles.menuModalContainer}>
+            <SideMenu 
+              navigation={{}} 
+              onClose={closeMenu}
+              onOpenActiveAssociation={() => {
+                closeMenu();
+                onOpenActiveAssociation?.();
+              }}
+              onOpenAssociations={() => {
+                closeMenu();
+                setShowAssociations(true);
+              }}
+              onOpenQuienRetira={() => {
+                closeMenu();
+                setShowQuienRetira(true);
+              }}
+              onOpenAcercaDe={() => {
+                closeMenu();
+                setShowAcercaDe(true);
+              }}
+              onOpenTerminosCondiciones={() => {
+                closeMenu();
+                setShowTerminosCondiciones(true);
+              }}
+              onOpenAcciones={() => {
+                closeMenu();
+                setShowAcciones(true);
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Asociaciones */}
+      <Modal
+        visible={showAssociations}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowAssociations(false)}
+      >
+        <AssociationsScreen onBack={() => setShowAssociations(false)} />
+      </Modal>
+
+      {/* Modal de Quien Retira */}
+      <Modal
+        visible={showQuienRetira}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowQuienRetira(false)}
+      >
+        <QuienRetiraScreen onBack={() => setShowQuienRetira(false)} />
+      </Modal>
+
+      {/* Modal de Acerca de */}
+      <Modal
+        visible={showAcercaDe}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowAcercaDe(false)}
+      >
+        <AcercaDeScreen onBack={() => setShowAcercaDe(false)} />
+      </Modal>
+
+      {/* Modal de Términos y Condiciones */}
+      <Modal
+        visible={showTerminosCondiciones}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowTerminosCondiciones(false)}
+      >
+        <TerminosCondicionesScreen onBack={() => setShowTerminosCondiciones(false)} />
+      </Modal>
+
+      {/* Modal de Acciones */}
+      <Modal
+        visible={showAcciones}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowAcciones(false)}
+      >
+        {(() => {
+          const getUserRole = () => {
+            if (activeAssociation?.role) {
+              return activeAssociation.role.nombre || activeAssociation.role;
+            }
+            return user?.role?.nombre || '';
+          };
+          
+          const role = getUserRole();
+          if (role === 'coordinador') {
+            return <StudentActionsScreen onBack={() => setShowAcciones(false)} />;
+          } else {
+            return <FamilyActionsCalendarScreen onBack={() => setShowAcciones(false)} />;
+          }
+        })()}
+      </Modal>
     </>
   );
 };
@@ -380,6 +474,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
     elevation: 10,
+  },
+  // Estilos para el modal del menú
+  menuModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+  },
+  overlayTouchable: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: '20%',
+    height: '100%',
+    backgroundColor: 'transparent',
+  },
+  menuModalContainer: {
+    width: '80%',
+    height: '100%',
+    backgroundColor: '#FFFFFF',
   },
 });
 

@@ -45,7 +45,7 @@ interface User {
   updatedAt: string;
 }
 
-const PerfilScreen = ({ onOpenNotifications, onOpenActiveAssociation }: { onOpenNotifications: () => void; onOpenActiveAssociation?: () => void }) => {
+const PerfilScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenActiveAssociation }: { onOpenNotifications: () => void; onOpenMenu?: () => void; onOpenActiveAssociation?: () => void }) => {
   const { logout, user: authUser, login, activeAssociation, refreshActiveAssociation } = useAuth();
   
   // Verificar si el usuario es familyadmin (usando el rol activo)
@@ -133,7 +133,11 @@ const PerfilScreen = ({ onOpenNotifications, onOpenActiveAssociation }: { onOpen
   };
 
   const openMenu = () => {
-    setShowMenu(true);
+    if (onOpenMenuProp) {
+      onOpenMenuProp();
+    } else {
+      setShowMenu(true);
+    }
   };
 
   const closeMenu = () => {

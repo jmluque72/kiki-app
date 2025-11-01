@@ -28,7 +28,7 @@ const AcercaDeScreen: React.FC<AcercaDeScreenProps> = ({ onBack }) => {
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Acerca de</Text>
+        <Text style={styles.headerTitle}>ACERCA DE KIKI</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -45,44 +45,42 @@ const AcercaDeScreen: React.FC<AcercaDeScreenProps> = ({ onBack }) => {
           <Text style={styles.version}>Versión 1.0.0</Text>
         </View>
 
-        {/* Descripción */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sobre la aplicación</Text>
-          <Text style={styles.description}>
-            Kiki App es una plataforma integral diseñada para facilitar la comunicación 
-            entre instituciones educativas, familias y estudiantes. Nuestra misión es 
-            crear un puente digital que conecte a toda la comunidad educativa de manera 
-            segura y eficiente.
-          </Text>
-        </View>
-
-
         {/* Información de contacto */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contacto y soporte</Text>
           <View style={styles.contactList}>
             <TouchableOpacity 
               style={styles.contactItem}
-              onPress={() => handleOpenLink('mailto:soporte@kikiapp.com')}
+              onPress={() => handleOpenLink('mailto:contacto.kikiapp@gmail.com')}
             >
               <Text style={styles.contactIcon}>📧</Text>
-              <Text style={styles.contactText}>soporte@kikiapp.com</Text>
+              <Text style={styles.contactText}>contacto.kikiapp@gmail.com</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.contactItem}
-              onPress={() => handleOpenLink('tel:+5491123456789')}
-            >
-              <Text style={styles.contactIcon}>📞</Text>
-              <Text style={styles.contactText}>+54 9 11 2345-6789</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.contactItem}
-              onPress={() => handleOpenLink('https://www.kikiapp.com')}
+              onPress={() => handleOpenLink('https://www.kiki.com.ar')}
             >
               <Text style={styles.contactIcon}>🌐</Text>
-              <Text style={styles.contactText}>www.kikiapp.com</Text>
+              <Text style={styles.contactText}>www.kiki.com.ar</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Descripción */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>SOBRE KIKI</Text>
+          <Text style={styles.description}>
+            Kiki App es una plataforma que conecta a las familias con las instituciones educativas de forma segura, simple y emocional.{'\n\n'}
+            A través de un entorno cuidado y privado, los profesores pueden compartir fotos, videos y momentos únicos del día a día en el aula, para que los padres disfruten, se emocionen y acompañen el crecimiento de sus hijos desde cualquier lugar.{'\n\n'}
+            En Kiki, cada familia accede únicamente al contenido relacionado con su hijo.{'\n\n'}
+            De esta manera, garantizamos un espacio de comunicación íntimo, confiable y lleno de alegría, donde la seguridad y la privacidad son prioridad. No se pueden descargar imágenes ni realizar capturas de pantalla, porque creemos que los recuerdos más valiosos merecen estar protegidos.{'\n\n'}
+            Los profesores cuentan con una interfaz ágil e intuitiva que les permite subir contenido de manera rápida y organizada, asignando cada imagen o video a los alumnos correspondientes.{'\n'}
+            Las instituciones, por su parte, disponen de un panel de control desde el cual pueden aprobar y supervisar las publicaciones, gestionar divisiones y mantener una comunicación fluida con docentes y familias.{'\n\n'}
+            Para los padres, Kiki se convierte en una ventana emocional al aula, donde pueden revivir momentos inolvidables y guardar sus favoritos en un álbum personalizado, ordenado por fecha.{'\n'}
+            Cada publicación puede marcarse con un corazón ❤️, generando una colección de recuerdos única, creada con amor.{'\n\n'}
+            Kiki App nació con un propósito claro: fortalecer el vínculo entre familias, docentes e instituciones, acompañando la educación con emoción, transparencia y tecnología de última generación.{'\n\n'}
+            Creemos que cada sonrisa, cada dibujo y cada logro merecen ser compartidos, y que la educación se construye juntos, día a día.
+          </Text>
         </View>
 
         {/* Información legal */}
@@ -152,6 +150,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 150,
     marginBottom: 15,
+    backgroundColor: 'transparent', // Logo sin fondo
   },
   appName: {
     fontSize: 24,

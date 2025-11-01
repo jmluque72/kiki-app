@@ -9,9 +9,9 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContextHybrid';
-import { useInstitution } from '../contexts/InstitutionContext';
-import { apiClient } from '../src/services/api';
+import { useAuth } from '../../contexts/AuthContextHybrid';
+import { useInstitution } from '../../contexts/InstitutionContext';
+import { apiClient } from '../services/api';
 
 interface StudentActionLog {
   _id: string;

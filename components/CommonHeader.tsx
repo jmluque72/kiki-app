@@ -139,7 +139,7 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
     <>
       {/* Header personalizado */}
       <View style={styles.homeHeader}>
-        {showMenuButton && onOpenMenu && (
+        {onOpenMenu && (
           <TouchableOpacity style={styles.menuIcon} onPress={onOpenMenu}>
             <Text style={styles.menuIconText}>☰</Text>
           </TouchableOpacity>

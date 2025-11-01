@@ -24,6 +24,7 @@
     "aws-amplify": "^6.15.7",
     "axios": "^1.11.0",
     "expo-linear-gradient": "^14.1.5",
+    "metro-cache": "^0.83.3",
     "react": "^19.1.0",
     "react-native": "^0.80.0",
     "react-native-camera-kit": "16.0.1",

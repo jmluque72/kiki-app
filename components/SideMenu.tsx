@@ -19,16 +19,31 @@ interface SideMenuProps {
   onOpenQuienRetira?: () => void;
   onOpenAcercaDe?: () => void;
   onOpenTerminosCondiciones?: () => void;
+  onOpenAcciones?: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation, onOpenAssociations, onOpenQuienRetira, onOpenAcercaDe, onOpenTerminosCondiciones }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation, onOpenAssociations, onOpenQuienRetira, onOpenAcercaDe, onOpenTerminosCondiciones, onOpenAcciones }) => {
   const { user, logout, associations, activeAssociation } = useAuth();
   const { selectedInstitution } = useInstitution();
 
   // Verificar si el usuario es familyadmin (padre)
   const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
+  
+  // Verificar si el usuario puede ver Acciones (coordinador, familyadmin, familyviewer)
+  const canViewAcciones = ['coordinador', 'familyadmin', 'familyviewer'].includes(
+    activeAssociation?.role?.nombre || user?.role?.nombre || ''
+  );
 
   const menuItems = [
+    // Mostrar "Acciones" para coordinadores y familias
+    ...(canViewAcciones ? [{
+      id: 'acciones',
+      title: 'Acciones',
+      onPress: () => {
+        onClose();
+        onOpenAcciones?.();
+      }
+    }] : []),
     // Solo mostrar "Quien Retira" para padres (familyadmin)
     ...(isFamilyAdmin ? [{
       id: 'quienRetira',
