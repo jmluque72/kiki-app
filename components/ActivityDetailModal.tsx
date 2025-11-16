@@ -249,6 +249,7 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
             {/* Carrusel de imágenes para usuarios familiares */}
             {isFamilyUser && activity.imagenes && activity.imagenes.length > 0 ? (
+              // Mostrar carrusel si hay imágenes
               <View style={styles.carouselContainer}>
                 <FlatList
                   data={activity.imagenes}
@@ -305,6 +306,11 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                   </View>
                 )}
               </View>
+            ) : isFamilyUser && (!activity.imagenes || activity.imagenes.length === 0) ? (
+              // Placeholder para usuarios familiares cuando no hay imágenes
+              <View style={styles.placeholderContainer}>
+                <Text style={styles.placeholderText}>Sin imágenes</Text>
+              </View>
             ) : (
               /* Carrusel de imágenes para coordinadores */
               activity.imagenes && activity.imagenes.length > 0 ? (
@@ -347,7 +353,6 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                 </View>
               ) : (
                 <View style={styles.noImageContainer}>
-                  <Text style={styles.noImageEmoji}>{getActivityEmoji(activity.tipo)}</Text>
                   <Text style={styles.noImageText}>Sin imagen</Text>
                 </View>
               )
@@ -461,19 +466,33 @@ const styles = StyleSheet.create({
   noImageContainer: {
     alignItems: 'center',
     padding: 30,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#E0E0E0',
     margin: 10,
     marginBottom: 15,
     borderRadius: 15,
-  },
-  noImageEmoji: {
-    fontSize: 36,
-    marginBottom: 8,
+    borderWidth: 3,
+    borderColor: '#FF8C42',
   },
   noImageText: {
     fontSize: 16,
     color: '#666666',
     fontFamily: fonts.medium,
+  },
+  placeholderContainer: {
+    width: '100%',
+    height: 250,
+    borderRadius: 10,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FF8C42',
+    marginBottom: 20,
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#999',
+    fontFamily: fonts.regular,
   },
   infoSection: {
     padding: 20,

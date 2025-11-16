@@ -25,11 +25,25 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Log detallado del error para debugging
+    const errorDetails = {
+      name: error?.name || 'UnknownError',
+      message: error?.message || 'Error desconocido',
+      stack: error?.stack || 'No stack trace available',
+      componentStack: errorInfo?.componentStack || 'No component stack',
+      errorInfo: errorInfo || {},
+    };
+
+    console.error('🚨 [ERROR BOUNDARY] Error capturado:', errorDetails);
+    console.error('🚨 [ERROR BOUNDARY] Error completo:', error);
+    console.error('🚨 [ERROR BOUNDARY] ErrorInfo completo:', errorInfo);
+    
     // Log del error para debugging
     appLogger.crash('Error Boundary capturó un error', error, {
       errorInfo,
       componentStack: errorInfo.componentStack,
       errorBoundary: 'MainErrorBoundary',
+      errorDetails,
     });
     
     // Reportar a Sentry (deshabilitado)
@@ -43,6 +57,7 @@ class ErrorBoundary extends Component<Props, State> {
     logCriticalError(error, 'ErrorBoundary', {
       errorInfo,
       componentStack: errorInfo.componentStack,
+      errorDetails,
     });
   }
 
@@ -52,6 +67,9 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const errorMessage = this.state.error?.message || 'Error desconocido';
+      const errorName = this.state.error?.name || 'Error';
+      
       return (
         <View style={styles.container}>
           <View style={styles.errorContainer}>
@@ -60,6 +78,17 @@ class ErrorBoundary extends Component<Props, State> {
             <Text style={styles.errorMessage}>
               Ha ocurrido un error inesperado. Por favor, intenta de nuevo.
             </Text>
+            {__DEV__ && this.state.error && (
+              <View style={styles.errorDetailsContainer}>
+                <Text style={styles.errorDetailsTitle}>Detalles del error (solo en desarrollo):</Text>
+                <Text style={styles.errorDetailsText}>{errorName}: {errorMessage}</Text>
+                {this.state.error.stack && (
+                  <Text style={styles.errorStackText} numberOfLines={5}>
+                    {this.state.error.stack}
+                  </Text>
+                )}
+              </View>
+            )}
             <TouchableOpacity style={styles.retryButton} onPress={this.handleRetry}>
               <Text style={styles.retryButtonText}>Reintentar</Text>
             </TouchableOpacity>
@@ -124,6 +153,32 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontFamily: fonts.semiBold,
+  },
+  errorDetailsContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    width: '100%',
+    maxHeight: 200,
+  },
+  errorDetailsTitle: {
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    color: '#666666',
+    marginBottom: 8,
+  },
+  errorDetailsText: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: '#333333',
+    marginBottom: 8,
+  },
+  errorStackText: {
+    fontSize: 10,
+    fontFamily: fonts.regular,
+    color: '#666666',
+    fontStyle: 'italic',
   },
 });
 

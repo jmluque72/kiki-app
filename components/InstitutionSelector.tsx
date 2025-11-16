@@ -18,7 +18,7 @@ interface InstitutionSelectorProps {
 
 const InstitutionSelector: React.FC<InstitutionSelectorProps> = ({ onInstitutionSelected }) => {
   const { userAssociations, selectedInstitution, setSelectedInstitution } = useInstitution();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [isSelecting, setIsSelecting] = useState(false);
 
   const handleInstitutionSelect = (institution: any) => {
@@ -65,6 +65,29 @@ const InstitutionSelector: React.FC<InstitutionSelectorProps> = ({ onInstitution
           <Text style={styles.subMessage}>
             Contacta al administrador para que te asigne a una institución.
           </Text>
+          
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={() => {
+              Alert.alert(
+                'Cerrar Sesión',
+                '¿Estás seguro de que deseas cerrar sesión?',
+                [
+                  {
+                    text: 'Cancelar',
+                    style: 'cancel'
+                  },
+                  {
+                    text: 'Cerrar Sesión',
+                    style: 'destructive',
+                    onPress: () => logout()
+                  }
+                ]
+              );
+            }}
+          >
+            <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -351,6 +374,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: fonts.medium,
+  },
+  logoutButton: {
+    backgroundColor: '#FF6B6B',
+    paddingVertical: 16,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 30,
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: fonts.bold,
   },
 });
 

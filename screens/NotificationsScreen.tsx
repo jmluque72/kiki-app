@@ -105,6 +105,7 @@ const NotificationsScreen = ({ navigation }: { navigation: any }) => {
             value={newNotification.title}
             onChangeText={(text) => setNewNotification({...newNotification, title: text})}
             placeholder="Ingresa el título de la notificación"
+            maxLength={100}
           />
         </View>
 

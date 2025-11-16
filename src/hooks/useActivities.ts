@@ -40,8 +40,30 @@ export const useActivities = (accountId?: string, divisionId?: string, selectedD
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Log cuando cambian los parámetros del hook
+  useEffect(() => {
+    console.log('📅 [useActivities] Hook recibió nuevos parámetros:', {
+      accountId,
+      divisionId,
+      selectedDate,
+      selectedDateType: typeof selectedDate,
+      selectedDateIsNull: selectedDate === null,
+      selectedDateIsUndefined: selectedDate === undefined,
+      selectedDateValue: selectedDate ? selectedDate.toISOString() : 'null/undefined'
+    });
+  }, [accountId, divisionId, selectedDate]);
+
   const fetchActivities = async () => {
-    console.log('useActivities - fetchActivities called with:', { accountId, divisionId, selectedDate });
+    console.log('📅 [useActivities] fetchActivities called with:', { 
+      accountId, 
+      divisionId, 
+      selectedDate,
+      selectedDateType: typeof selectedDate,
+      selectedDateIsNull: selectedDate === null,
+      selectedDateIsUndefined: selectedDate === undefined,
+      selectedDateValue: selectedDate ? selectedDate.toString() : 'null/undefined',
+      selectedDateISO: selectedDate ? selectedDate.toISOString() : 'null/undefined'
+    });
     
     if (!accountId) {
       console.log('useActivities - No accountId provided, setting empty activities');
@@ -59,11 +81,18 @@ export const useActivities = (accountId?: string, divisionId?: string, selectedD
         params.append('divisionId', divisionId);
       }
       if (selectedDate) {
-        params.append('selectedDate', selectedDate.toISOString());
+        const dateStr = selectedDate.toISOString();
+        params.append('selectedDate', dateStr);
+        console.log('📅 [useActivities] ✅ Fecha presente, agregando a params:', dateStr);
+        console.log('📅 [useActivities] Fecha original:', selectedDate);
+        console.log('📅 [useActivities] Fecha ISO:', dateStr);
+      } else {
+        console.log('📅 [useActivities] ⚠️ selectedDate es null/undefined, NO se agregará a params');
       }
 
       const url = `/activities/mobile?${params.toString()}`;
-      console.log('useActivities - Calling API:', url);
+      console.log('📅 [useActivities] URL completa:', url);
+      console.log('📅 [useActivities] Params string:', params.toString());
       
       const response = await apiClient.get(url);
       console.log('useActivities - API response:', response.data);
@@ -98,9 +127,19 @@ export const useActivities = (accountId?: string, divisionId?: string, selectedD
     }
   };
 
+  // Convertir selectedDate a string para que React detecte cambios correctamente
+  // Los objetos Date se comparan por referencia, no por valor
+  const selectedDateString = selectedDate ? selectedDate.toISOString() : null;
+  
   useEffect(() => {
+    console.log('📅 [useActivities] useEffect ejecutado con dependencias:', {
+      accountId,
+      divisionId,
+      selectedDate: selectedDate ? selectedDate.toISOString() : 'null',
+      selectedDateString
+    });
     fetchActivities();
-  }, [accountId, divisionId, selectedDate]);
+  }, [accountId, divisionId, selectedDateString]);
 
   const refetch = () => {
     fetchActivities();

@@ -16,6 +16,7 @@ import { useInstitution } from '../contexts/InstitutionContext';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useLoading } from '../contexts/LoadingContext';
 import { useStudents } from '../src/hooks/useStudents';
+import { useCustomAlert } from '../src/hooks/useCustomAlert';
 import { fonts } from '../src/config/fonts';
 
 interface NotificationCenterProps {
@@ -25,7 +26,12 @@ interface NotificationCenterProps {
 }
 
 const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClose, onShowSuccess }) => {
-  const [activeTab, setActiveTab] = useState<'received' | 'send'>('received');
+  // Verificar si el usuario es coordinador usando la asociación activa
+  const { activeAssociation } = useAuth();
+  const isCoordinador = activeAssociation?.role?.nombre === 'coordinador';
+  
+  // Para coordinadores, iniciar en la pestaña "enviar"
+  const [activeTab, setActiveTab] = useState<'received' | 'send'>(isCoordinador ? 'send' : 'received');
   const [showSendForm, setShowSendForm] = useState(true);
   const [formData, setFormData] = useState({
     title: '',
@@ -36,11 +42,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedNotificationDetails, setSelectedNotificationDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [sendingNotification, setSendingNotification] = useState(false);
 
   const { notifications, recipients, loading, markAsRead, deleteNotification, sendNotification, loadRecipients, loadNotifications } = useNotifications();
   const { selectedInstitution } = useInstitution();
   const { user } = useAuth();
   const { showLoading, hideLoading } = useLoading();
+  const { showError } = useCustomAlert();
   
   // Log de notificaciones en el componente
   useEffect(() => {
@@ -48,9 +56,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     console.log('📱 NotificationCenter - Cantidad:', notifications?.length || 0);
   }, [notifications]);
   
-  // Verificar si el usuario es coordinador usando la asociación activa
-  const { activeAssociation } = useAuth();
-  const isCoordinador = activeAssociation?.role?.nombre === 'coordinador';
+  const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
+  const isFamilyViewer = activeAssociation?.role?.nombre === 'familyviewer';
   
   // Debug temporal para verificar el rol
   console.log('NotificationCenter - Usuario:', user?.name);
@@ -61,6 +68,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     division: activeAssociation.division?.nombre
   } : null);
   console.log('NotificationCenter - Es coordinador:', isCoordinador);
+  
+  // Cuando se abre el modal y el usuario es coordinador, ir automáticamente a la pestaña "enviar"
+  useEffect(() => {
+    if (visible && isCoordinador) {
+      setActiveTab('send');
+    }
+  }, [visible, isCoordinador]);
   
   // Hook para obtener estudiantes
   const { students, loading: studentsLoading } = useStudents(
@@ -73,7 +87,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
 
   useEffect(() => {
     if (visible && selectedInstitution) {
-      loadRecipients(selectedInstitution.account._id, selectedInstitution.division?._id);
+      if (selectedInstitution.account?._id) {
+        loadRecipients(selectedInstitution.account._id, selectedInstitution.division?._id);
+      }
       // Recargar notificaciones cuando cambie la institución
       loadNotifications();
     }
@@ -182,12 +198,33 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
 
   const handleSendNotification = async () => {
     if (!formData.title || !formData.message) {
+      showError('Error', 'Por favor completa todos los campos');
+      return;
+    }
+    
+    if (formData.title.length > 100) {
+      showError('Error', 'El título no puede exceder 100 caracteres');
+      return;
+    }
+    
+    if (formData.message.length > 256) {
+      showError('Error', 'El mensaje no puede exceder 256 caracteres');
+      return;
+    }
+    
+    if (!formData.title.trim() || !formData.message.trim()) {
       console.log('Error: Por favor completa todos los campos');
       return;
     }
 
     if (!selectedInstitution) {
       console.log('Error: No hay institución seleccionada');
+      return;
+    }
+
+    // Validar que la institución tenga account
+    if (!selectedInstitution.account || !selectedInstitution.account._id) {
+      console.log('Error: La institución no tiene cuenta válida');
       return;
     }
 
@@ -200,6 +237,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     }
 
     try {
+      setSendingNotification(true);
       showLoading('Enviando notificación...');
       
       await sendNotification({
@@ -207,7 +245,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         message: formData.message,
         type: formData.type,
         accountId: selectedInstitution.account._id,
-        divisionId: selectedInstitution.division?._id,
+        divisionId: selectedInstitution.division?._id || undefined,
         recipients: selectedStudentIds
       });
 
@@ -222,11 +260,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         setFormData({
           title: '',
           message: '',
-          type: 'informacion',
+          type: 'coordinador',
           recipients: []
         });
         setSelectedStudents({});
         setShowSendForm(false);
+        setSendingNotification(false);
         
         // Cerrar el modal del centro de notificaciones
         onClose();
@@ -234,32 +273,69 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
       
     } catch (error: any) {
       hideLoading();
+      setSendingNotification(false);
       console.log('Error al enviar notificación:', error.message || 'Error al enviar notificación');
+      showError('Error', error.message || 'Error al enviar notificación');
     }
   };
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'comunicacion': return '#FF6B35';
-      case 'informacion': return '#4A90E2';
       case 'coordinador': return '#0E5FCE';
+      case 'institucion': return '#4A90E2';
       default: return '#4A90E2';
     }
   };
 
   // Iconos para tipos de notificación
   const notificationIcons: { [key: string]: any } = {
-    comunicacion: require('../assets/design/icons/kiki_mensajes.png'),
-    informacion: require('../assets/design/icons/kiki_notificaciones.png'),
-    coordinador: require('../assets/design/icons/kiki_notificaciones.png')
+    coordinador: require('../assets/design/icons/kiki_notificaciones.png'),
+    institucion: require('../assets/design/icons/kiki_notificaciones.png')
   };
+  
+  // Filtrar notificaciones para mostrar solo coordinador e institucion
+  const filteredNotifications = (notifications || []).filter((notification: any) => {
+    if (!notification || !notification.type) return false;
+    const type = notification.type.toLowerCase();
+    return type === 'coordinador' || type === 'institucion';
+  });
 
   const getTypeIcon = (type: string) => {
-    return notificationIcons[type] || notificationIcons.informacion;
+    return notificationIcons[type] || notificationIcons.coordinador;
   };
 
   const renderNotification = ({ item }: { item: any }) => {
+    // Validar que el item sea válido
+    if (!item || !item._id) {
+      return null;
+    }
+    
     const isRead = isNotificationRead(item);
+    
+    // Validar propiedades requeridas
+    const notificationTitle = item.title || 'Sin título';
+    const notificationType = item.type || 'coordinador';
+    // El sender puede tener 'name' (User) o 'nombre' (si viene del servidor transformado)
+    const senderName = item.sender?.name || item.sender?.nombre || 'Desconocido';
+    
+    // Obtener nombre del estudiante si es familyadmin o familyviewer
+    let studentName = null;
+    if ((isFamilyAdmin || isFamilyViewer) && item.recipients && item.recipients.length > 0) {
+      // El servidor ya combina nombre y apellido en el campo 'nombre' para estudiantes
+      // Buscar el primer recipient que tenga nombre (puede ser estudiante o usuario)
+      const studentRecipient = item.recipients.find((recipient: any) => 
+        recipient.nombre && !recipient.name // Si tiene 'nombre' pero no 'name', es estudiante
+      );
+      if (studentRecipient && studentRecipient.nombre) {
+        studentName = studentRecipient.nombre;
+      } else {
+        // Si no encontramos uno con 'nombre', buscar cualquier recipient con nombre
+        const anyRecipient = item.recipients.find((recipient: any) => recipient.nombre);
+        if (anyRecipient) {
+          studentName = anyRecipient.nombre;
+        }
+      }
+    }
     
     return (
       <View style={[
@@ -279,7 +355,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         >
           <View style={styles.notificationHeader}>
             <Image
-              source={getTypeIcon(item.type)}
+              source={getTypeIcon(notificationType)}
               style={styles.notificationIcon}
               resizeMode="contain"
             />
@@ -288,14 +364,19 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                 styles.notificationTitle,
                 !isRead && styles.notificationTitleUnread
               ]}>
-                {item.title}
+                {notificationTitle}
               </Text>
               <Text style={styles.notificationSender}>
-                {item.sender.nombre}
+                {senderName}
               </Text>
+              {studentName && (
+                <Text style={styles.studentName}>
+                  Hijo: {studentName}
+                </Text>
+              )}
             </View>
-            <View style={[styles.typeBadge, { backgroundColor: getTypeColor(item.type) }]}>
-              <Text style={styles.typeText}>{item.type.toUpperCase()}</Text>
+            <View style={[styles.typeBadge, { backgroundColor: getTypeColor(notificationType) }]}>
+              <Text style={styles.typeText}>{notificationType.toUpperCase()}</Text>
             </View>
           </View>
           
@@ -351,27 +432,50 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
 
       {/* Título */}
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>Título:</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Título:</Text>
+          <Text style={styles.characterCount}>
+            {formData.title.length}/100
+          </Text>
+        </View>
         <TextInput
           style={styles.textInput}
           value={formData.title}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+          onChangeText={(text) => {
+            if (text.length <= 100) {
+              setFormData(prev => ({ ...prev, title: text }));
+            }
+          }}
           placeholder="Ingresa el título de la notificación"
           placeholderTextColor="#999"
+          maxLength={100}
         />
       </View>
 
       {/* Mensaje */}
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>Mensaje:</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Mensaje:</Text>
+          <Text style={[
+            styles.characterCount,
+            formData.message.length > 256 && styles.characterCountError
+          ]}>
+            {formData.message.length}/256
+          </Text>
+        </View>
         <TextInput
           style={[styles.textInput, styles.messageInput]}
           value={formData.message}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, message: text }))}
+          onChangeText={(text) => {
+            if (text.length <= 256) {
+              setFormData(prev => ({ ...prev, message: text }));
+            }
+          }}
           placeholder="Ingresa el mensaje de la notificación"
           placeholderTextColor="#999"
           multiline
           numberOfLines={4}
+          maxLength={256}
         />
       </View>
 
@@ -429,10 +533,17 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
       {/* Botón de enviar */}
       <View style={styles.formButtons}>
         <TouchableOpacity
-          style={styles.sendButton}
+          style={[
+            styles.sendButton,
+            sendingNotification && styles.sendButtonDisabled
+          ]}
           onPress={handleSendNotification}
+          disabled={sendingNotification}
+          activeOpacity={sendingNotification ? 1 : 0.7}
         >
-          <Text style={styles.sendButtonText}>Enviar</Text>
+          <Text style={styles.sendButtonText}>
+            {sendingNotification ? 'Enviando...' : 'Enviar'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -462,7 +573,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
               onPress={() => setActiveTab('received')}
             >
               <Text style={[styles.tabText, activeTab === 'received' && styles.activeTabText]}>
-                Recibidas
+                Enviadas
               </Text>
             </TouchableOpacity>
             
@@ -487,11 +598,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
             <View style={styles.receivedContainer}>
               {loading ? (
                 <Text style={styles.loadingText}>Cargando notificaciones...</Text>
-              ) : notifications.length === 0 ? (
+              ) : filteredNotifications.length === 0 ? (
                 <Text style={styles.noNotificationsText}>No hay notificaciones recibidas</Text>
               ) : (
                 <FlatList
-                  data={notifications}
+                  data={filteredNotifications}
                   renderItem={renderNotification}
                   keyExtractor={(item) => item._id}
                   showsVerticalScrollIndicator={false}
@@ -504,11 +615,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
               <View style={styles.receivedContainer}>
                 {loading ? (
                   <Text style={styles.loadingText}>Cargando notificaciones...</Text>
-                ) : notifications.length === 0 ? (
+                ) : filteredNotifications.length === 0 ? (
                   <Text style={styles.noNotificationsText}>No hay notificaciones recibidas</Text>
                 ) : (
                   <FlatList
-                    data={notifications}
+                    data={filteredNotifications}
                     renderItem={renderNotification}
                     keyExtractor={(item) => item._id}
                     showsVerticalScrollIndicator={false}
@@ -626,7 +737,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                         <Text style={styles.detailsSectionTitle}>Leída por padres:</Text>
                         <View style={styles.readByList}>
                           {selectedNotificationDetails.readBy
-                            .filter((read: any) => read.user?.role?.nombre !== 'coordinador')
+                            .filter((read: any) => {
+                              if (!read?.user) return false;
+                              // Excluir coordinadores
+                              if (read.user?.role?.nombre === 'coordinador') return false;
+                              // Excluir el creador/sender de la notificación
+                              if (read.user?._id === selectedNotificationDetails.sender?._id) return false;
+                              // Solo incluir tutores (familyadmin y familyviewer)
+                              return read.user?.role?.nombre === 'familyadmin' || read.user?.role?.nombre === 'familyviewer';
+                            })
                             .map((read: any, index: number) => (
                               <View key={index} style={styles.readByItem}>
                                 <Text style={styles.readByUser}>
@@ -763,7 +882,6 @@ const styles = StyleSheet.create({
   },
   sendContainer: {
     flex: 1,
-    padding: 15,
   },
   notificationItem: {
     backgroundColor: '#FFFFFF',
@@ -829,6 +947,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666666',
   },
+  studentName: {
+    fontSize: 12,
+    color: '#0E5FCE',
+    fontWeight: '600',
+    marginTop: 2,
+  },
   typeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -868,7 +992,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sendFormContent: {
-    paddingBottom: 20,
+    padding: 15,
+    paddingBottom: 50,
   },
   formTitle: {
     fontSize: 20,
@@ -881,6 +1006,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333333',
     marginBottom: 15,
+  },
+  labelContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  characterCount: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: 'normal',
+  },
+  characterCountError: {
+    color: '#FF3B30',
+    fontWeight: 'bold',
   },
   inputContainer: {
     marginBottom: 20,
@@ -899,7 +1039,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   studentsSection: {
-    marginBottom: 20,
+    marginBottom: 40,
   },
   studentsHeader: {
     flexDirection: 'row',
@@ -934,7 +1074,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-around',
     paddingHorizontal: 10,
-    maxHeight: 200,
   },
   studentItem: {
     width: '22%',
@@ -996,7 +1135,8 @@ const styles = StyleSheet.create({
   },
   formButtons: {
     flexDirection: 'row',
-    marginTop: 20,
+    marginTop: 30,
+    marginBottom: 30,
   },
   sendButton: {
     flex: 1,
@@ -1009,6 +1149,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.6,
+    shadowOpacity: 0,
   },
   sendButtonText: {
     fontSize: 16,

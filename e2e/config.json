@@ -1,0 +1,19 @@
+{
+  "preset": "react-native",
+  "setupFilesAfterEnv": ["<rootDir>/init.js"],
+  "testEnvironment": "node",
+  "reporters": ["detox/runners/jest/reporter"],
+  "verbose": true,
+  "transform": {
+    "^.+\\.js$": "babel-jest"
+  },
+  "testMatch": ["**/*.e2e.js"],
+  "moduleFileExtensions": ["js", "jsx", "json"],
+  "collectCoverage": false,
+  "coveragePathIgnorePatterns": ["/node_modules/", "/e2e/"],
+  "testPathIgnorePatterns": ["/node_modules/"],
+  "haste": {
+    "defaultPlatform": "ios",
+    "platforms": ["ios", "android"]
+  }
+}

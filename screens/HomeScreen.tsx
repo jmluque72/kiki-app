@@ -25,6 +25,7 @@ import { useSideMenu } from '../src/hooks/useSideMenu';
 import SideMenu from '../components/SideMenu';
 import AssociationsScreen from './AssociationsScreen';
 import QuienRetiraScreen from './QuienRetiraScreen';
+import RetirarScreen from './RetirarScreen';
 import AcercaDeScreen from './AcercaDeScreen';
 import TerminosCondicionesScreen from './TerminosCondicionesScreen';
 import StudentActionsScreen from '../src/screens/StudentActionsScreen';
@@ -45,6 +46,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
   const [showInstitutionSelector, setShowInstitutionSelector] = useState(false);
   const [showAssociations, setShowAssociations] = useState(false);
   const [showQuienRetira, setShowQuienRetira] = useState(false);
+  const [showRetirar, setShowRetirar] = useState(false);
   const [showAcercaDe, setShowAcercaDe] = useState(false);
   const [showTerminosCondiciones, setShowTerminosCondiciones] = useState(false);
   const [showAcciones, setShowAcciones] = useState(false);
@@ -179,7 +181,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         {/* Pestaña Inicio - Siempre visible */}
         <Tab.Screen
           name="Inicio"
-          component={() => <InicioScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} />}
+          component={() => <InicioScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} onOpenActiveAssociation={onOpenActiveAssociation} />}
           options={{
             headerShown: false,
             tabBarIcon: ({ focused }) => (
@@ -284,7 +286,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
               tabBarIcon: ({ focused }) => (
                 <View style={styles.tabIconContainer}>
                   <Image
-                    source={require('../assets/design/icons/home_tab_4_star.png')}
+                    source={require('../assets/design/icons/calendar.png')}
                     style={[styles.tabIconImage, { tintColor: focused ? '#FF8C42' : '#FFFFFF' }]}
                     resizeMode="contain"
                   />
@@ -361,6 +363,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
                 closeMenu();
                 setShowQuienRetira(true);
               }}
+              onOpenRetirar={() => {
+                closeMenu();
+                setShowRetirar(true);
+              }}
               onOpenAcercaDe={() => {
                 closeMenu();
                 setShowAcercaDe(true);
@@ -396,6 +402,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         onRequestClose={() => setShowQuienRetira(false)}
       >
         <QuienRetiraScreen onBack={() => setShowQuienRetira(false)} />
+      </Modal>
+
+      {/* Modal de Retirar */}
+      <Modal
+        visible={showRetirar}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowRetirar(false)}
+      >
+        <RetirarScreen onBack={() => setShowRetirar(false)} />
       </Modal>
 
       {/* Modal de Acerca de */}

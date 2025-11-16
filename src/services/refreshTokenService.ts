@@ -20,6 +20,11 @@ export class RefreshTokenService {
    */
   static async saveTokens(tokenData: RefreshTokenData): Promise<void> {
     try {
+      // Validar que los tokens no sean null o undefined
+      if (!tokenData.accessToken || !tokenData.refreshToken) {
+        throw new Error('Access token o refresh token es null/undefined');
+      }
+      
       const expiresAt = Date.now() + (tokenData.tokenExpiresIn * 1000);
       
       await AsyncStorage.multiSet([

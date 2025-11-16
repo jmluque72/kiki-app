@@ -21,10 +21,11 @@ interface CommonHeaderProps {
     apellido: string;
     avatar?: string;
   } | null;
+  onOpenActiveAssociation?: () => void;
 }
 
-const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpenMenu, showMenuButton = false, activeStudent }) => {
-  const { selectedInstitution, userAssociations, getActiveInstitution } = useInstitution();
+const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpenMenu, showMenuButton = false, activeStudent, onOpenActiveAssociation }) => {
+  const { selectedInstitution, userAssociations, getActiveInstitution, getActiveStudent } = useInstitution();
   
   // Verificación de seguridad para useAuth
   let user, activeAssociation;
@@ -43,6 +44,11 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
 
   // Obtener la institución activa desde la asociación activa
   const activeInstitution = getActiveInstitution();
+
+  // Debug: Log para verificar onOpenActiveAssociation
+  console.log('🔍 [CommonHeader] onOpenActiveAssociation prop:', !!onOpenActiveAssociation);
+  console.log('🔍 [CommonHeader] activeAssociation?.role?.nombre:', activeAssociation?.role?.nombre);
+  console.log('🔍 [CommonHeader] user?.role?.nombre:', user?.role?.nombre);
 
   // Debug logs
   const currentRole = activeAssociation?.role?.nombre || user?.role?.nombre;
@@ -135,6 +141,7 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
     return '';
   };
 
+
   return (
     <>
       {/* Header personalizado */}
@@ -173,11 +180,27 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
 
       {/* Sección azul dividida en 3 partes */}
       <View style={styles.greetingSection}>
-        {/* Nombre del Estudiante y Rol */}
+        {/* Nombre del Estudiante/Coordinador y Rol */}
         <View style={styles.sectionPart}>
           {(() => {
             const currentRole = activeAssociation?.role?.nombre || user?.role?.nombre;
             const studentData = getStudentData();
+            
+            // Para coordinadores, mostrar nombre del coordinador
+            if (currentRole === 'coordinador' && user?.name) {
+              return (
+                <>
+                  <Text style={styles.sectionValue}>
+                    {user.name}
+                  </Text>
+                  {getRoleDisplayNameLocal() && (
+                    <Text style={styles.roleText}>
+                      {getRoleDisplayNameLocal()}
+                    </Text>
+                  )}
+                </>
+              );
+            }
             
             // Para roles familiares, mostrar nombre y apellido en líneas separadas
             if ((currentRole === 'familyadmin' || currentRole === 'familyviewer') && studentData) {
@@ -217,9 +240,11 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
             // Si no hay estudiante, solo mostrar el rol
             if (getRoleDisplayNameLocal()) {
               return (
-                <Text style={styles.roleText}>
-                  {getRoleDisplayNameLocal()}
-                </Text>
+                <>
+                  <Text style={styles.roleText}>
+                    {getRoleDisplayNameLocal()}
+                  </Text>
+                </>
               );
             }
             
@@ -414,6 +439,15 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     marginTop: 2,
   },
+  activeProfileText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    opacity: 0.9,
+    marginTop: 4,
+    fontStyle: 'italic',
+    textDecorationLine: 'underline',
+  },
   divisionText: {
     fontSize: 12,
     fontWeight: 'normal',
@@ -433,6 +467,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   avatarIcon: {
     fontSize: 20,

@@ -110,6 +110,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('   - Email:', userData.email);
         console.log('   - Rol:', userData.role.nombre);
         console.log('   - Tipo:', userData.isCognitoUser ? 'Cognito' : 'Legacy');
+        console.log('   - isFirstLogin:', userData.isFirstLogin);
+        console.log('   - isFirstLogin tipo:', typeof userData.isFirstLogin);
         
         console.log('🏫 Asociaciones guardadas:', associationsData.length);
         associationsData.forEach((assoc: Association, index: number) => {
@@ -209,6 +211,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('   - Rol (del usuario):', userData.role.nombre);
       console.log('   - Descripción del rol:', userData.role.descripcion);
       console.log('   - Tipo de autenticación:', isCognitoUser ? 'Cognito' : 'Legacy');
+      console.log('   - isFirstLogin:', userData.isFirstLogin);
+      console.log('   - isFirstLogin tipo:', typeof userData.isFirstLogin);
+      console.log('   - isFirstLogin === true:', userData.isFirstLogin === true);
       
       if (activeAssociationData) {
         console.log('🎯 Asociación activa recibida del login:');
@@ -255,7 +260,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setAuthToken(newToken);
       
       // Guardar usuario y token en AsyncStorage
-      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
+      // Solo guardar el token si no es null o undefined
+      if (newToken) {
+        await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
+      } else {
+        console.warn('⚠️ [AuthContext] Token es null/undefined, no se guardará en AsyncStorage');
+        // Si no hay token, eliminar el token anterior
+        await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
+      }
+      console.log('💾 [AUTH CONTEXT] Guardando usuario en AsyncStorage con isFirstLogin:', userData.isFirstLogin);
+      console.log('💾 [AUTH CONTEXT] Tipo de isFirstLogin:', typeof userData.isFirstLogin);
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
       
       // Cargar asociaciones del usuario

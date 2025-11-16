@@ -199,7 +199,13 @@ export class MockAuthService {
    */
   static async saveMockData(user: any, token: string, activeAssociation: any, associations: any[]): Promise<void> {
     try {
-      await AsyncStorage.setItem('auth_token', token);
+      // Solo guardar el token si no es null o undefined
+      if (token) {
+        await AsyncStorage.setItem('auth_token', token);
+      } else {
+        console.warn('⚠️ [MockAuth] Token es null/undefined, no se guardará');
+        await AsyncStorage.removeItem('auth_token');
+      }
       await AsyncStorage.setItem('auth_user', JSON.stringify(user));
       await AsyncStorage.setItem('auth_active_association', JSON.stringify(activeAssociation));
       await AsyncStorage.setItem('auth_associations', JSON.stringify(associations));

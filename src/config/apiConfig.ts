@@ -12,7 +12,7 @@ const isEmulator = () => {
 };
 
 // Configuración base del API
-export const getApiBaseUrl= () => {
+export const getApiBaseUrl = () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost
@@ -20,19 +20,19 @@ export const getApiBaseUrl= () => {
   
   if (Platform.OS === 'android') {
     // Para emulador Android - usar 10.0.2.2 que es la IP del host desde el emulador
-    return __DEV__ ? 'http://192.168.68.103:3000' : 'https://api.kiki.com.ar';
+    return __DEV__ ? 'http://192.168.68.106:3000' : 'https://api.kiki.com.ar';
   } else if (Platform.OS === 'ios') {
     // Para emulador iOS o dispositivo físico iOS
-    return __DEV__ ? 'http://192.168.68.103:3000' : 'https://api.kiki.com.ar';
+    return __DEV__ ? 'http://192.168.68.106:3000' : 'https://api.kiki.com.ar';
   }
   
   // Fallback
-  return __DEV__ ? 'http://192.168.68.103' : 'https://api.kiki.com.ar';
+  return __DEV__ ? 'http://192.168.68.106' : 'https://api.kiki.com.ar';
 };
 
 
 // Configuración base del API
-export const getApiBaseUrlRemote= () => {
+export const getApiBaseUrlLocal = () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost
@@ -60,8 +60,8 @@ export const API_PATH = '/api';
 // URL completa del API (base + path)
 export const API_FULL_URL = `${API_BASE_URL}${API_PATH}`;
 
-// Configuración de timeout
-export const API_TIMEOUT = 10000;
+// Configuración de timeout (30 segundos para operaciones que requieren múltiples consultas a la DB)
+export const API_TIMEOUT = 30000;
 
 // Headers por defecto
 export const DEFAULT_HEADERS = {

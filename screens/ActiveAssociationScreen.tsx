@@ -9,10 +9,14 @@ import {
   ActivityIndicator,
   Image
 } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { fonts } from '../src/config/fonts';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { ActiveAssociationService, AvailableAssociation } from '../src/services/activeAssociationService';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
+import { processStudentImage, prepareStudentImageForUpload } from '../src/services/studentImageService';
+import { apiClient } from '../src/services/api';
+import { checkImagePermissions } from '../src/utils/permissionUtils';
 
 interface ActiveAssociationScreenProps {
   onBack: () => void;
@@ -23,6 +27,7 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
   const [availableAssociations, setAvailableAssociations] = useState<AvailableAssociation[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -101,6 +106,103 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
     }
   };
 
+  const openGalleryForStudent = async (student: any) => {
+    console.log('📱 [GALLERY] Abriendo galería para estudiante:', student.nombre);
+    console.log('📱 [GALLERY] Student ID:', student._id);
+    console.log('📱 [GALLERY] Active association role:', activeAssociation?.role?.nombre);
+    
+    // Verificar permisos primero
+    const hasPermissions = await checkImagePermissions();
+    if (!hasPermissions) {
+      console.log('📱 [GALLERY] Permisos denegados');
+      return;
+    }
+    
+    const options = {
+      mediaType: 'photo' as const,
+      includeBase64: false,
+      maxHeight: 2000,
+      maxWidth: 2000,
+      quality: 0.8,
+      selectionLimit: 1,
+    };
+
+    launchImageLibrary(options, (response) => {
+      if (response.didCancel) {
+        console.log('📱 [GALLERY] Usuario canceló la galería');
+        return;
+      } 
+      
+      if (response.errorCode || response.error) {
+        console.error('📱 [GALLERY] Error de galería:', response.errorCode, response.errorMessage);
+        Alert.alert('Error', 'No se pudo abrir la galería');
+        return;
+      }
+      
+      if (response.assets && response.assets[0] && response.assets[0].uri) {
+        handleUploadStudentAvatar(student, response.assets[0].uri);
+      } else {
+        Alert.alert('Error', 'No se encontraron imágenes');
+      }
+    });
+  };
+
+  const handleUploadStudentAvatar = async (student: any, imageUri: string) => {
+    try {
+      setUploadingAvatar(student._id);
+      console.log('🖼️ [STUDENT AVATAR] Procesando imagen del estudiante:', student.nombre);
+      
+      // Procesar la imagen antes de subirla
+      const processedImage = await processStudentImage(imageUri);
+      console.log('✅ [STUDENT AVATAR] Imagen procesada:', processedImage.width, 'x', processedImage.height);
+      
+      // Preparar la imagen para subir
+      const formData = prepareStudentImageForUpload(processedImage);
+      
+      const response = await apiClient.put(`/students/${student._id}/avatar`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      const result = response.data;
+      
+      if (result.success) {
+        console.log('✅ [STUDENT AVATAR] Avatar del estudiante actualizado exitosamente');
+        
+        // Actualizar el avatar en el estado local
+        setAvailableAssociations(prev => prev.map(assoc => {
+          if (assoc.student && assoc.student._id === student._id) {
+            return {
+              ...assoc,
+              student: {
+                ...assoc.student,
+                avatar: result.data.student.avatar
+              }
+            };
+          }
+          return assoc;
+        }));
+        
+        // Recargar las asociaciones
+        await loadAvailableAssociations();
+        
+        // Refrescar la asociación activa para que el header se actualice
+        await refreshActiveAssociation();
+        
+        Alert.alert('Éxito', 'Avatar actualizado correctamente');
+      } else {
+        console.error('❌ [STUDENT AVATAR] Error del servidor:', result.message);
+        Alert.alert('Error', result.message || 'Error al actualizar el avatar del estudiante');
+      }
+    } catch (error: any) {
+      console.error('❌ [STUDENT AVATAR] Error al subir avatar del estudiante:', error);
+      Alert.alert('Error', 'Error al actualizar el avatar del estudiante');
+    } finally {
+      setUploadingAvatar(null);
+    }
+  };
+
   const renderAssociationCard = (association: AvailableAssociation) => {
     // Usar directamente el campo isActive que viene del API
     const isActive = association.isActive;
@@ -110,19 +212,31 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
     console.log(`🔍 [ActiveAssociationScreen] ${association.account.nombre} - ${association.role.nombre}:`, {
       associationId: association._id,
       isActiveFromAPI: association.isActive,
-      isSwitching: isSwitching
+      isActive: isActive,
+      isSwitching: isSwitching,
+      hasStudent: !!association.student,
+      studentNombre: association.student?.nombre
     });
+    
+    // Alert para debug
+    if (association.student) {
+      Alert.alert('DEBUG CARD', `Card: ${association.account.nombre}\nEstudiante: ${association.student.nombre}\nisActive: ${isActive}\nRol: ${association.role.nombre}`);
+    }
 
     return (
-      <TouchableOpacity
+      <View
         key={association._id}
         style={[
           styles.associationCard,
           isActive && styles.activeAssociationCard
         ]}
-        onPress={() => !isActive && handleSwitchAssociation(association._id)}
-        disabled={isActive || isSwitching}
       >
+        <TouchableOpacity
+          style={styles.cardTouchableArea}
+          onPress={() => !isActive && handleSwitchAssociation(association._id)}
+          disabled={isActive || isSwitching}
+          activeOpacity={0.7}
+        >
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <Text style={[styles.institutionName, isActive && styles.activeText]}>
@@ -156,22 +270,26 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
         {association.student && (
           <View style={styles.cardContent}>
             <View style={styles.studentInfo}>
-              {association.student.avatar ? (
-                <Image 
-                  source={{ uri: association.student.avatar }} 
-                  style={styles.studentAvatar}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.studentAvatarPlaceholder}>
-                  <Text style={styles.studentAvatarText}>
-                    {association.student.nombre.charAt(0)}
-                  </Text>
-                </View>
-              )}
-              <Text style={[styles.studentName, isActive && styles.activeText]}>
-                👨‍🎓 {association.student.nombre} {association.student.apellido}
-              </Text>
+              <View style={styles.studentAvatarContainer}>
+                {association.student.avatar ? (
+                  <Image 
+                    source={{ uri: association.student.avatar }} 
+                    style={styles.studentAvatar}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.studentAvatarPlaceholder}>
+                    <Text style={styles.studentAvatarText}>
+                      {association.student.nombre.charAt(0)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.studentTextContainer}>
+                <Text style={[styles.studentName, isActive && styles.activeText]}>
+                  👨‍🎓 {association.student.nombre} {association.student.apellido}
+                </Text>
+              </View>
             </View>
           </View>
         )}
@@ -181,7 +299,38 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
             <Text style={styles.switchText}>Toca para cambiar</Text>
           </View>
         )}
-      </TouchableOpacity>
+        </TouchableOpacity>
+        
+        {/* Botón de cambiar avatar - fuera del TouchableOpacity, solo en la asociación activa */}
+        {(() => {
+          console.log('🔍 [ActiveAssociationScreen] Verificando botón - isActive:', isActive, 'hasStudent:', !!association.student, 'student:', association.student?.nombre);
+          Alert.alert('DEBUG BOTÓN', `isActive: ${isActive}\nhasStudent: ${!!association.student}\nestudiante: ${association.student?.nombre || 'N/A'}`);
+          
+          if (isActive && association.student) {
+            Alert.alert('DEBUG BOTÓN TRUE', `Botón debería aparecer - isActive: ${isActive}, estudiante: ${association.student.nombre}`);
+            return (
+              <TouchableOpacity
+                style={styles.changeAvatarButton}
+                onPress={() => {
+                  Alert.alert('Botón presionado', `Cambiar avatar de ${association.student.nombre}`);
+                  console.log('📷 [ActiveAssociationScreen] Botón cambiar avatar presionado para:', association.student.nombre);
+                  openGalleryForStudent(association.student);
+                }}
+                disabled={uploadingAvatar === association.student._id}
+              >
+                {uploadingAvatar === association.student._id ? (
+                  <ActivityIndicator size="small" color="#0E5FCE" />
+                ) : (
+                  <Text style={styles.changeAvatarButtonText}>Cambiar avatar</Text>
+                )}
+              </TouchableOpacity>
+            );
+          } else {
+            Alert.alert('DEBUG BOTÓN FALSE', `No se muestra botón - isActive: ${isActive}, hasStudent: ${!!association.student}`);
+          }
+          return null;
+        })()}
+      </View>
     );
   };
 
@@ -371,23 +520,77 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  studentAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  studentTextContainer: {
+    flex: 1,
+  },
+  studentAvatarContainer: {
+    position: 'relative',
     marginRight: 8,
+    width: 60,
+    height: 60,
+    zIndex: 100,
+  },
+  studentAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   studentAvatarPlaceholder: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#FF8C42',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+  },
+  editStudentAvatarButton: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0E5FCE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 15,
+    zIndex: 1000,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  editStudentAvatarIcon: {
+    width: 16,
+    height: 16,
+    tintColor: '#FFFFFF',
+  },
+  changeAvatarButton: {
+    marginTop: 12,
+    marginBottom: 12,
+    marginHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#0E5FCE',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  changeAvatarButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: fonts.medium,
+  },
+  cardTouchableArea: {
+    flex: 1,
   },
   studentAvatarText: {
-    fontSize: 12,
+    fontSize: 24,
     color: '#FFFFFF',
     fontFamily: fonts.bold,
   },

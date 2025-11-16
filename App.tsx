@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar, View, ActivityIndicator } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { logAppStart, appLogger } from './src/utils/logger';
+import { setupGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import LoginScreen from './screens/LoginScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import VerifyCodeScreen from './screens/VerifyCodeScreen';
@@ -51,6 +52,8 @@ const AppContent = () => {
 
   // Detectar primer login y mostrar pantalla de cambio de contraseña
   useEffect(() => {
+    console.log('🔍 [App.tsx] useEffect ejecutado - isAuthenticated:', isAuthenticated, 'user:', user?.email, 'isFirstLogin:', user?.isFirstLogin);
+    
     appLogger.auth('Auth state changed', {
       isAuthenticated,
       userEmail: user?.email,
@@ -60,24 +63,38 @@ const AppContent = () => {
     
     // Solo ejecutar si el usuario está autenticado Y tiene datos completos
     if (isAuthenticated && user && user.email) {
-      appLogger.auth('Usuario autenticado con datos completos');
+      appLogger.auth('Usuario autenticado con datos completos', {
+        userEmail: user.email,
+        isFirstLogin: user.isFirstLogin,
+        isFirstLoginType: typeof user.isFirstLogin,
+        isFirstLoginTrue: user.isFirstLogin === true,
+        userObject: JSON.stringify(user)
+      });
       
+      // Verificar isFirstLogin - puede ser true, false, undefined, o null
+      const shouldShowChangePassword = user.isFirstLogin === true || user.isFirstLogin === 'true' || user.isFirstLogin === 1;
       
-      if (user.isFirstLogin === true) {
+      if (shouldShowChangePassword) {
+        console.log('✅ [App.tsx] PRIMER LOGIN DETECTADO - Mostrando pantalla de cambio de contraseña');
         appLogger.auth('PRIMER LOGIN DETECTADO - Mostrando pantalla de cambio de contraseña', {
-          userEmail: user.email
+          userEmail: user.email,
+          isFirstLogin: user.isFirstLogin
         });
         setShowChangePassword(true);
-      } else if (user.isFirstLogin === false) {
+      } else if (user.isFirstLogin === false || user.isFirstLogin === 'false' || user.isFirstLogin === 0) {
+        console.log('ℹ️ [App.tsx] Usuario ya cambió contraseña, continuando flujo normal');
         appLogger.auth('Usuario ya cambió contraseña, continuando flujo normal');
         setShowChangePassword(false);
       } else {
+        console.log('⚠️ [App.tsx] Usuario autenticado pero isFirstLogin es undefined/null:', user.isFirstLogin);
         appLogger.auth('Usuario autenticado pero isFirstLogin es undefined/null', {
-          isFirstLogin: user.isFirstLogin
+          isFirstLogin: user.isFirstLogin,
+          isFirstLoginType: typeof user.isFirstLogin
         });
         setShowChangePassword(false);
       }
     } else {
+      console.log('❌ [App.tsx] No autenticado o sin usuario completo');
       appLogger.auth('No autenticado o sin usuario completo', {
         isAuthenticated,
         hasUser: !!user
@@ -155,8 +172,21 @@ const AppContent = () => {
         appLogger.navigation('User is authenticated, determining screen', {
           associationsCount: associations.length,
           showInstitutionSelector,
-          showActiveAssociation
+          showActiveAssociation,
+          showChangePassword
         });
+        
+        // PRIORIDAD 1: Si debe cambiar contraseña (primer login), mostrar pantalla de cambio de contraseña
+        if (showChangePassword) {
+          console.log('🔑 [App.tsx] Mostrando pantalla de cambio de contraseña (primer login)');
+          appLogger.navigation('Showing change password screen (first login)');
+          return (
+            <ChangePasswordScreen 
+              isFirstLogin={true}
+              onPasswordChanged={handlePasswordChanged}
+            />
+          );
+        }
         
         // Si está autenticado pero no tiene asociaciones, mostrar selector
         if (associations.length === 0) {
@@ -211,16 +241,6 @@ const AppContent = () => {
         );
       }
 
-      if (showChangePassword) {
-        appLogger.navigation('Showing change password screen');
-        return (
-          <ChangePasswordScreen 
-            isFirstLogin={true}
-            onPasswordChanged={handlePasswordChanged}
-          />
-        );
-      }
-
       if (showActiveAssociation) {
         appLogger.navigation('Showing active association screen');
         return (
@@ -249,12 +269,14 @@ const AppContent = () => {
 
 const App = () => {
   // Inicializar logging al arrancar la app
+  // Nota: Los error handlers ya se configuraron en index.js antes de registrar el componente
   useEffect(() => {
     try {
       // Log de inicio de app
       logAppStart();
       
       appLogger.auth('App initialized successfully');
+      console.log('✅ [APP] App component montado correctamente');
     } catch (error) {
       appLogger.crash('Error initializing app', error as Error);
       console.error('❌ [APP] Critical error during initialization:', error);

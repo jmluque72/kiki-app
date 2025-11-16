@@ -21,7 +21,7 @@ import ActivityDetailModal from '../components/ActivityDetailModal';
 import CustomCalendar from '../components/CustomCalendar';
 import { getFirstMedia, getMediaType } from '../src/utils/mediaUtils';
 
-const InicioScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications: () => void; onOpenMenu?: () => void }) => {
+const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation }: { onOpenNotifications: () => void; onOpenMenu?: () => void; onOpenActiveAssociation?: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
   
   // Verificación de seguridad para useAuth
@@ -40,6 +40,17 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications
   // Usar la primera institución si no hay ninguna seleccionada
   const effectiveInstitution = selectedInstitution || (userAssociations.length > 0 ? userAssociations[0] : null);
   
+  // Estado para el pull-to-refresh
+  const [refreshing, setRefreshing] = React.useState(false);
+  
+  // Estado para el modal de detalles de actividad
+  const [selectedActivity, setSelectedActivity] = React.useState<any>(null);
+  const [modalVisible, setModalVisible] = React.useState(false);
+  
+  // Estado para el calendario - IMPORTANTE: Declarar ANTES de usarlo
+  const [calendarVisible, setCalendarVisible] = React.useState(false);
+  const [selectedDate, setSelectedDate] = React.useState<Date | null>(null);
+  
   // Debug logs para ver qué institución se está usando
   console.log('🔍 [InicioScreen] effectiveInstitution:', effectiveInstitution ? {
     id: effectiveInstitution._id,
@@ -56,17 +67,25 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications
     effectiveInstitution?.division?._id,
     selectedDate
   );
-
-  // Estado para el pull-to-refresh
-  const [refreshing, setRefreshing] = React.useState(false);
   
-  // Estado para el modal de detalles de actividad
-  const [selectedActivity, setSelectedActivity] = React.useState<any>(null);
-  const [modalVisible, setModalVisible] = React.useState(false);
+  // Log para verificar qué se está pasando al hook
+  React.useEffect(() => {
+    console.log('📅 [InicioScreen] Valores pasados a useActivities:', {
+      accountId: effectiveInstitution?.account._id,
+      divisionId: effectiveInstitution?.division?._id,
+      selectedDate: selectedDate,
+      selectedDateType: typeof selectedDate,
+      selectedDateValue: selectedDate ? selectedDate.toISOString() : 'null'
+    });
+  }, [effectiveInstitution?.account._id, effectiveInstitution?.division?._id, selectedDate]);
   
-  // Estado para el calendario
-  const [calendarVisible, setCalendarVisible] = React.useState(false);
-  const [selectedDate, setSelectedDate] = React.useState<Date | null>(null);
+  // Log cuando selectedDate cambia
+  React.useEffect(() => {
+    console.log('📅 [InicioScreen] selectedDate cambió:', selectedDate);
+    console.log('📅 [InicioScreen] selectedDate tipo:', typeof selectedDate);
+    console.log('📅 [InicioScreen] selectedDate valor:', selectedDate ? selectedDate.toString() : 'null');
+    console.log('📅 [InicioScreen] selectedDate ISO:', selectedDate ? selectedDate.toISOString() : 'null');
+  }, [selectedDate]);
   
   // Debug del estado del modal
   React.useEffect(() => {
@@ -151,7 +170,14 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications
   };
 
   const handleDateSelect = (date: Date) => {
-    setSelectedDate(date);
+    // Normalizar la fecha al inicio del día (00:00:00) para evitar problemas de zona horaria
+    const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+    console.log('📅 [InicioScreen] handleDateSelect llamado');
+    console.log('📅 [InicioScreen] Fecha seleccionada original:', date);
+    console.log('📅 [InicioScreen] Fecha normalizada:', normalizedDate);
+    console.log('📅 [InicioScreen] Fecha normalizada ISO:', normalizedDate.toISOString());
+    setSelectedDate(normalizedDate);
+    console.log('📅 [InicioScreen] selectedDate actualizado a:', normalizedDate);
     setCalendarVisible(false);
   };
 
@@ -229,7 +255,8 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications
 
   return (
     <View style={styles.homeContainer}>
-      <CommonHeader 
+      <CommonHeader
+        onOpenActiveAssociation={onOpenActiveAssociation} 
         onOpenNotifications={onOpenNotifications} 
         onOpenMenu={onOpenMenu}
         showMenuButton={true}
@@ -358,10 +385,9 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotifications
                         );
                       })()
                     ) : (
-                      <View style={styles.timelineIcon}>
-                        <Text style={styles.timelineIconText}>
-                          {getActivityEmoji(activity.tipo)}
-                        </Text>
+                      // Placeholder cuando no hay imagen ni video
+                      <View style={styles.timelineImageContainer}>
+                        <View style={styles.placeholderContainer} />
                       </View>
                     )}
                   </View>
@@ -507,6 +533,14 @@ const styles = StyleSheet.create({
   },
   timelineImageContainer: {
     position: 'relative',
+  },
+  placeholderContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: '#E0E0E0',
+    borderWidth: 3,
+    borderColor: '#FF8C42',
   },
   timelineImage: {
     width: 110,

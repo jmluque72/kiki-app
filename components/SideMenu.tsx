@@ -17,17 +17,22 @@ interface SideMenuProps {
   onOpenActiveAssociation?: () => void;
   onOpenAssociations?: () => void;
   onOpenQuienRetira?: () => void;
+  onOpenFamilyViewers?: () => void;
   onOpenAcercaDe?: () => void;
   onOpenTerminosCondiciones?: () => void;
   onOpenAcciones?: () => void;
+  onOpenRetirar?: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation, onOpenAssociations, onOpenQuienRetira, onOpenAcercaDe, onOpenTerminosCondiciones, onOpenAcciones }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation, onOpenAssociations, onOpenQuienRetira, onOpenFamilyViewers, onOpenAcercaDe, onOpenTerminosCondiciones, onOpenAcciones, onOpenRetirar }) => {
   const { user, logout, associations, activeAssociation } = useAuth();
   const { selectedInstitution } = useInstitution();
 
   // Verificar si el usuario es familyadmin (padre)
   const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
+  
+  // Verificar si el usuario es coordinador
+  const isCoordinador = activeAssociation?.role?.nombre === 'coordinador';
   
   // Verificar si el usuario puede ver Acciones (coordinador, familyadmin, familyviewer)
   const canViewAcciones = ['coordinador', 'familyadmin', 'familyviewer'].includes(
@@ -44,6 +49,15 @@ const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAs
         onOpenAcciones?.();
       }
     }] : []),
+    // Solo mostrar "Retirar" para coordinadores
+    ...(isCoordinador ? [{
+      id: 'retirar',
+      title: 'Retirar',
+      onPress: () => {
+        onClose();
+        onOpenRetirar?.();
+      }
+    }] : []),
     // Solo mostrar "Quien Retira" para padres (familyadmin)
     ...(isFamilyAdmin ? [{
       id: 'quienRetira',
@@ -51,6 +65,15 @@ const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAs
       onPress: () => {
         onClose();
         onOpenQuienRetira?.();
+      }
+    }] : []),
+    // Solo mostrar "Family Viewers" para padres (familyadmin)
+    ...(isFamilyAdmin ? [{
+      id: 'familyViewers',
+      title: 'Visualizadores',
+      onPress: () => {
+        onClose();
+        onOpenFamilyViewers?.();
       }
     }] : []),
         {

@@ -38,6 +38,20 @@ export interface SharedResponse {
   associations: Shared[];
 }
 
+export interface FamilyViewer {
+  _id: string;
+  user: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  role: {
+    _id: string;
+    nombre: string;
+  };
+  createdAt: string;
+}
+
 class SharedService {
   // Obtener asociaciones del usuario
   static async getUserAssociations(): Promise<Shared[]> {
@@ -116,6 +130,22 @@ class SharedService {
         throw error;
       }
       throw new Error('Error al agregar familiar');
+    }
+  }
+
+  // Obtener familyviewers de un estudiante (solo familyadmin)
+  static async getFamilyViewers(studentId: string): Promise<FamilyViewer[]> {
+    try {
+      console.log('🔍 [SHARED SERVICE] Obteniendo familyviewers para estudiante:', studentId);
+      const response = await apiClient.get(`/shared/student/${studentId}/familyviewers`);
+      console.log('✅ [SHARED SERVICE] Familyviewers obtenidos:', response.data.data.familyviewers.length);
+      return response.data.data.familyviewers || [];
+    } catch (error: any) {
+      console.error('❌ [SHARED SERVICE] Error obteniendo familyviewers:', error);
+      if (error.response?.data) {
+        throw error;
+      }
+      throw new Error('Error al obtener familyviewers');
     }
   }
 }

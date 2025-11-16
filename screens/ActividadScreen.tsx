@@ -7,13 +7,16 @@ import {
   Image,
   TextInput,
   StyleSheet,
-  FlatList
+  FlatList,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useStudents } from '../src/hooks/useStudents';
 import { API_FULL_URL } from '../src/config/apiConfig';
+import { apiClient } from '../src/services/api';
 import CommonHeader from '../components/CommonHeader';
 import withSideMenu from '../components/withSideMenu';
 import { useCustomAlert } from '../src/hooks/useCustomAlert';
@@ -109,12 +112,12 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
             return;
           }
           
-          // Validar tamaño de videos (máximo 10MB)
+          // Validar tamaño de videos (máximo 50MB para videos de ~30 segundos)
           const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
-          if (fileSizeMB > 10) {
+          if (fileSizeMB > 50) {
             showError(
               'Video demasiado pesado',
-              `El video pesa ${fileSizeMB.toFixed(2)}MB. El límite máximo es de 10MB. Por favor, selecciona un video más liviano o comprímelo antes de subirlo.`
+              `El video pesa ${fileSizeMB.toFixed(2)}MB. El límite máximo es de 50MB.\n\nPor favor, selecciona un video más liviano o comprímelo antes de subirlo.`
             );
             return;
           }
@@ -160,12 +163,12 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
               continue;
             }
             
-            // Validar tamaño de videos (máximo 10MB)
+            // Validar tamaño de videos (máximo 50MB para videos de ~30 segundos)
             const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
-            if (fileSizeMB > 10) {
+            if (fileSizeMB > 50) {
               rejectedVideos.push({
                 fileName: asset.fileName || 'Video',
-                reason: `tamaño (${fileSizeMB.toFixed(2)}MB, máximo 10MB)`
+                reason: `tamaño (${fileSizeMB.toFixed(2)}MB, máximo 50MB)`
               });
               continue;
             }
@@ -180,7 +183,7 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
           const reasons = rejectedVideos.map(v => `${v.fileName}: ${v.reason}`).join('\n');
           showError(
             `${rejectedVideos.length} video${rejectedVideos.length > 1 ? 's' : ''} rechazado${rejectedVideos.length > 1 ? 's' : ''}`,
-            `Los siguientes videos no se pudieron agregar:\n${reasons}\n\nPor favor, selecciona videos más cortos (máximo 30 segundos) y más livianos (máximo 10MB).`
+            `Los siguientes videos no se pudieron agregar:\n\n${reasons}\n\nRequisitos:\n- Duración máxima: 30 segundos\n- Tamaño máximo: 50MB\n\nPor favor, selecciona videos que cumplan con estos requisitos.`
           );
         }
         
@@ -240,18 +243,34 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
   };
 
   const validateForm = () => {
+    // Validar título
     if (!formData.titulo.trim()) {
-      console.log('Error: El título de la actividad es obligatorio');
+      showError(
+        'Campo obligatorio',
+        'No completaste el título de la actividad. Por favor, ingresa un título antes de continuar.'
+      );
       return false;
     }
+    
+    // Validar participantes
     if (selectedParticipantes.length === 0) {
-      console.log('Error: Debes seleccionar al menos un participante');
+      showError(
+        'Campo obligatorio',
+        'No seleccionaste ningún participante. Por favor, selecciona al menos un estudiante antes de continuar.'
+      );
       return false;
     }
-    if (selectedImages.length === 0) {
-      console.log('Error: Debes seleccionar al menos una foto o video');
+    
+    // Validar descripción
+    if (!formData.descripcion.trim()) {
+      showError(
+        'Campo obligatorio',
+        'No completaste la descripción de la actividad. Por favor, ingresa una descripción antes de continuar.'
+      );
       return false;
     }
+    
+    // La imagen/video ya no es obligatoria - se puede crear actividad sin media
     return true;
   };
 
@@ -490,29 +509,14 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
           try {
             console.log(`📤 [ACTIVIDAD] Subiendo imagen ${i + 1}/${formDataArray.length}`);
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-            const response = await fetch(`${API_FULL_URL}/upload/s3/image`, {
-              method: 'POST',
-              body: formDataArray[i],
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
-              signal: controller.signal,
+            // Usar apiClient para que el interceptor maneje el refresh del token
+            // axios maneja automáticamente el Content-Type para FormData
+            const response = await apiClient.post('/upload/s3/image', formDataArray[i], {
+              timeout: 30000,
             });
 
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-              const result = await response.json();
-              console.log('✅ [ACTIVIDAD] Imagen subida exitosamente:', result);
-              uploadedMedia.push(result.imageKey);
-            } else {
-              const errorText = await response.text();
-              console.error('❌ [ACTIVIDAD] Error del servidor:', errorText);
-              throw new Error(`Error al subir imagen: ${response.status} ${response.statusText}`);
-            }
+            console.log('✅ [ACTIVIDAD] Imagen subida exitosamente:', response.data);
+            uploadedMedia.push(response.data.imageKey);
           } catch (error) {
             console.error('❌ [ACTIVIDAD] Error uploading image:', error);
             throw new Error(`Error al subir imagen: ${error.message}`);
@@ -524,15 +528,29 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
       if (videos.length > 0) {
         console.log('📹 [ACTIVIDAD] ===== PROCESANDO VIDEOS =====');
         
-        // Filtrar videos válidos por duración y tamaño
-        const validVideos = filterValidVideos(videos, 30, 10);
+        // Filtrar videos válidos por duración y tamaño (30 segundos, 50MB)
+        const validVideos = filterValidVideos(videos, 30, 50);
         console.log('📹 [ACTIVIDAD] Videos válidos:', validVideos.length, 'de', videos.length);
         
         if (validVideos.length !== videos.length) {
           const rejectedCount = videos.length - validVideos.length;
+          const rejectedVideos = videos.filter(v => !validVideos.includes(v));
+          const reasons = rejectedVideos.map(v => {
+            const durationSeconds = v.duration ? v.duration / 1000 : 0;
+            const fileSizeMB = (v.fileSize || 0) / (1024 * 1024);
+            const issues = [];
+            if (durationSeconds > 30) {
+              issues.push(`duración (${Math.round(durationSeconds)}s, máximo 30s)`);
+            }
+            if (fileSizeMB > 50) {
+              issues.push(`tamaño (${fileSizeMB.toFixed(2)}MB, máximo 50MB)`);
+            }
+            return `• ${v.fileName || 'Video'}: ${issues.join(', ')}`;
+          }).join('\n');
+          
           showError(
             `${rejectedCount} video${rejectedCount > 1 ? 's' : ''} rechazado${rejectedCount > 1 ? 's' : ''}`,
-            `Algunos videos no cumplen con los requisitos:\n- Duración máxima: 30 segundos\n- Tamaño máximo: 10MB`
+            `Los siguientes videos no se pudieron subir:\n\n${reasons}\n\nRequisitos:\n- Duración máxima: 30 segundos\n- Tamaño máximo: 50MB\n\nPor favor, selecciona videos que cumplan con estos requisitos.`
           );
         }
 
@@ -542,29 +560,14 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
           try {
             console.log(`📤 [ACTIVIDAD] Subiendo video ${i + 1}/${formDataArray.length}`);
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos para videos
-
-            const response = await fetch(`${API_FULL_URL}/upload/s3/video`, {
-              method: 'POST',
-              body: formDataArray[i],
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
-              signal: controller.signal,
+            // Usar apiClient para que el interceptor maneje el refresh del token
+            // axios maneja automáticamente el Content-Type para FormData
+            const response = await apiClient.post('/upload/s3/video', formDataArray[i], {
+              timeout: 60000, // 60 segundos para videos
             });
 
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-              const result = await response.json();
-              console.log('✅ [ACTIVIDAD] Video subido exitosamente:', result);
-              uploadedMedia.push(result.videoKey);
-            } else {
-              const errorText = await response.text();
-              console.error('❌ [ACTIVIDAD] Error del servidor:', errorText);
-              throw new Error(`Error al subir video: ${response.status} ${response.statusText}`);
-            }
+            console.log('✅ [ACTIVIDAD] Video subido exitosamente:', response.data);
+            uploadedMedia.push(response.data.videoKey);
           } catch (error) {
             console.error('❌ [ACTIVIDAD] Error uploading video:', error);
             throw new Error(`Error al subir video: ${error.message}`);
@@ -583,24 +586,34 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
   const submitActivity = async () => {
     console.log('Iniciando submitActivity...');
 
+    // Validar formulario y mostrar mensajes específicos
     if (!validateForm()) {
       console.log('Validación del formulario falló');
       return;
     }
 
     if (!user) {
-      console.log('No hay usuario autenticado');
+      showError(
+        'Error de autenticación',
+        'No hay usuario autenticado. Por favor, inicia sesión nuevamente.'
+      );
       return;
     }
 
     if (!effectiveInstitution?.account._id) {
-      console.log('No hay institución seleccionada');
+      showError(
+        'Institución no seleccionada',
+        'No has seleccionado una institución. Por favor, selecciona una institución antes de continuar.'
+      );
       return;
     }
 
     // Verificar que se tenga una división seleccionada si el usuario tiene división
     if (effectiveInstitution.division && !effectiveInstitution.division._id) {
-      console.log('No hay división seleccionada');
+      showError(
+        'División no seleccionada',
+        'No has seleccionado una división. Por favor, selecciona una división antes de continuar.'
+      );
       return;
     }
 
@@ -629,42 +642,20 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
       };
 
       console.log('Datos de actividad a enviar:', activityData);
-      console.log('URL de actividades:', `${API_FULL_URL}/activities`);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
+      // Usar apiClient en lugar de fetch para que el interceptor maneje el refresh del token
+      const response = await apiClient.post('/activities', activityData);
 
-      const response = await fetch(`${API_FULL_URL}/activities`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(activityData),
-        signal: controller.signal,
+      console.log('Actividad enviada exitosamente:', response.data);
+      showSuccess('Actividad', 'Actividad enviada correctamente');
+      // Limpiar formulario
+      setFormData({
+        titulo: '',
+        participantes: '',
+        descripcion: ''
       });
-
-      clearTimeout(timeoutId);
-
-      console.log('Respuesta del servidor de actividades:', response.status, response.statusText);
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Actividad enviada exitosamente:', result);
-        showSuccess('Actividad', 'Actividad enviada correctamente');
-        // Limpiar formulario
-        setFormData({
-          titulo: '',
-          participantes: '',
-          descripcion: ''
-        });
-        setSelectedImages([]);
-        setSelectedParticipantes([]); // Limpiar participantes seleccionados
-      } else {
-        const errorText = await response.text();
-        console.error('Error del servidor de actividades:', errorText);
-        throw new Error(`Error al enviar la actividad: ${response.status} ${response.statusText}`);
-      }
+      setSelectedImages([]);
+      setSelectedParticipantes([]); // Limpiar participantes seleccionados
     } catch (error) {
       console.error('Error submitting activity:', error);
       showError('Error', error.message || 'Error al enviar la actividad');
@@ -693,13 +684,23 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
 
   return (
     <View style={styles.homeContainer}>
-              <CommonHeader 
-          onOpenNotifications={onOpenNotifications} 
-          onOpenMenu={onOpenMenu}
-          activeStudent={getActiveStudent()}
-        />
+      <CommonHeader 
+        onOpenNotifications={onOpenNotifications} 
+        onOpenMenu={onOpenMenu}
+        activeStudent={getActiveStudent()}
+      />
       
-      <ScrollView style={styles.scrollContainer}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 100}
+      >
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContentContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={true}
+        >
         {/* Título ACTIVIDAD y Botón de cámara unificados */}
         <View style={styles.unifiedHeaderContainer}>
           <Text style={styles.actividadTitle}>ACTIVIDAD</Text>
@@ -707,7 +708,7 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
           <TouchableOpacity style={styles.mediaButton} onPress={handleImagePicker}>
             <View style={styles.mediaButtonCircle}>
               <Image
-                source={require('../assets/design/icons/camera.png')}
+                source={require('../assets/design/icons/photo.png')}
                 style={[styles.mediaButtonImage, { tintColor: '#FFFFFF' }]}
                 resizeMode="contain"
               />
@@ -833,20 +834,21 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
             />
           </View>
         </View>
-
-        {/* Botón de enviar */}
-        <View style={styles.submitButtonContainer}>
-          <TouchableOpacity
-            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-            onPress={submitActivity}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.submitButtonText}>
-              {isSubmitting ? 'Enviando...' : 'Enviar Actividad'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      
+      {/* Botón flotante de enviar */}
+      <View style={styles.floatingButtonContainer}>
+        <TouchableOpacity
+          style={[styles.floatingButton, isSubmitting && styles.submitButtonDisabled]}
+          onPress={submitActivity}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.submitButtonText}>
+            {isSubmitting ? 'Enviando...' : 'Enviar Actividad'}
+          </Text>
+        </TouchableOpacity>
+      </View>
       
       {/* Custom Alert */}
       {alertConfig && (
@@ -885,8 +887,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     paddingTop: 50,
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   scrollContainer: {
     flex: 1,
+  },
+  scrollContentContainer: {
+    paddingBottom: 200, // Espacio extra al final para que el botón flotante no tape el contenido (botón a 110px + altura del botón ~70px + margen)
   },
   unifiedHeaderContainer: {
     alignItems: 'center',
@@ -1030,17 +1038,41 @@ const styles = StyleSheet.create({
     minHeight: 120,
     color: '#0E5FCE',
   },
-  submitButtonContainer: {
+  floatingButtonContainer: {
+    position: 'absolute',
+    bottom: 110, // Por encima del bottom tab (100px de altura + 10px de margen)
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
-    paddingBottom: 120,
-    marginTop: 20,
+    paddingBottom: 0,
+    paddingTop: 0,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    // Sombra para efecto flotante
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8, // Para Android
   },
-  submitButton: {
+  floatingButton: {
     backgroundColor: '#FF8C42',
     paddingVertical: 18,
     paddingHorizontal: 40,
     borderRadius: 15,
     alignItems: 'center',
+    // Sombra adicional para el botón
+    shadowColor: '#FF8C42',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8, // Para Android
   },
   submitButtonText: {
     color: '#FFFFFF',

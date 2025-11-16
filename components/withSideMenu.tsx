@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContextHybrid';
 import SideMenu from './SideMenu';
 import AssociationsScreen from '../screens/AssociationsScreen';
 import QuienRetiraScreen from '../screens/QuienRetiraScreen';
+import RetirarScreen from '../screens/RetirarScreen';
+import FamilyViewersScreen from '../screens/FamilyViewersScreen';
 import AcercaDeScreen from '../screens/AcercaDeScreen';
 import TerminosCondicionesScreen from '../screens/TerminosCondicionesScreen';
 import StudentActionsScreen from '../src/screens/StudentActionsScreen';
@@ -22,6 +24,8 @@ const withSideMenu = <P extends object>(
     const { user, activeAssociation } = useAuth();
     const [showAssociations, setShowAssociations] = useState(false);
     const [showQuienRetira, setShowQuienRetira] = useState(false);
+    const [showRetirar, setShowRetirar] = useState(false);
+    const [showFamilyViewers, setShowFamilyViewers] = useState(false);
     const [showAcercaDe, setShowAcercaDe] = useState(false);
     const [showTerminosCondiciones, setShowTerminosCondiciones] = useState(false);
     const [showAcciones, setShowAcciones] = useState(false);
@@ -82,6 +86,14 @@ const withSideMenu = <P extends object>(
                 closeMenu();
                 setShowQuienRetira(true);
               }}
+              onOpenRetirar={() => {
+                closeMenu();
+                setShowRetirar(true);
+              }}
+              onOpenFamilyViewers={() => {
+                closeMenu();
+                setShowFamilyViewers(true);
+              }}
                        onOpenAcercaDe={() => {
                          closeMenu();
                          setShowAcercaDe(true);
@@ -117,6 +129,26 @@ const withSideMenu = <P extends object>(
           onRequestClose={() => setShowQuienRetira(false)}
         >
           <QuienRetiraScreen onBack={() => setShowQuienRetira(false)} />
+        </Modal>
+        
+        {/* Modal de Retirar */}
+        <Modal
+          visible={showRetirar}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => setShowRetirar(false)}
+        >
+          <RetirarScreen onBack={() => setShowRetirar(false)} />
+        </Modal>
+        
+        {/* Modal de Family Viewers */}
+        <Modal
+          visible={showFamilyViewers}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => setShowFamilyViewers(false)}
+        >
+          <FamilyViewersScreen onBack={() => setShowFamilyViewers(false)} />
         </Modal>
         
         {/* Modal de Acerca de */}

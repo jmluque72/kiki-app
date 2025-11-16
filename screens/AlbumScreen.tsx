@@ -23,6 +23,11 @@ const imageSize = (screenWidth - 60) / 2; // 2 columnas con padding
 
 interface FavoriteActivity {
   _id: string;
+  student?: string | {
+    _id: string;
+    nombre?: string;
+    apellido?: string;
+  };
   activity: {
     _id: string;
     titulo: string;
@@ -99,17 +104,31 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
     const grouped: { [key: string]: FavoriteActivity[] } = {};
     
     activities.forEach(activity => {
-      // console.log('🔍 [AlbumScreen] Procesando actividad:', {
-      //   titulo: activity.activity.titulo,
-      //   participantes: activity.activity.participantes,
-      //   participantesLength: activity.activity.participantes?.length
-      // });
+      let studentName = 'Mi Estudiante'; // Fallback por defecto
       
-      // Obtener el nombre del estudiante de los participantes o usar el del usuario
-      let studentName = getUserStudentName(); // Fallback al estudiante del usuario
+      // PRIORIDAD 1: Usar el campo student del favorito si está disponible
+      // (el favorito tiene un campo student que indica a qué estudiante pertenece)
+      if (activity.student) {
+        const studentId = typeof activity.student === 'string' 
+          ? activity.student 
+          : activity.student._id;
+        
+        // Buscar el estudiante en las asociaciones del usuario
+        const studentAssociation = userAssociations.find(assoc => 
+          assoc.student?._id === studentId
+        );
+        
+        if (studentAssociation?.student) {
+          if (studentAssociation.student.nombre && studentAssociation.student.apellido) {
+            studentName = `${studentAssociation.student.nombre} ${studentAssociation.student.apellido}`;
+          } else if (studentAssociation.student.nombre) {
+            studentName = studentAssociation.student.nombre;
+          }
+        }
+      }
       
-      // Verificar que activity.activity no sea null antes de acceder a participantes
-      if (activity.activity && activity.activity.participantes && activity.activity.participantes.length > 0) {
+      // PRIORIDAD 2: Si no se encontró por student, usar participantes de la actividad
+      if (studentName === 'Mi Estudiante' && activity.activity && activity.activity.participantes && activity.activity.participantes.length > 0) {
         const participant = activity.activity.participantes[0];
         if (participant.nombre && participant.apellido) {
           studentName = `${participant.nombre} ${participant.apellido}`;
@@ -118,7 +137,10 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
         }
       }
       
-      // console.log('👤 [AlbumScreen] Nombre del estudiante:', studentName);
+      // PRIORIDAD 3: Fallback al nombre del estudiante activo
+      if (studentName === 'Mi Estudiante') {
+        studentName = getUserStudentName();
+      }
       
       if (!grouped[studentName]) {
         grouped[studentName] = [];
@@ -126,13 +148,15 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
       grouped[studentName].push(activity);
     });
 
-    // Convertir a array de secciones
-    const sections = Object.keys(grouped).map(studentName => ({
-      title: studentName,
-      data: grouped[studentName]
-    }));
+    // Convertir a array de secciones y ordenar por nombre
+    const sections = Object.keys(grouped)
+      .sort()
+      .map(studentName => ({
+        title: studentName,
+        data: grouped[studentName]
+      }));
     
-    // console.log('📊 [AlbumScreen] Secciones creadas:', sections.map(s => ({ title: s.title, count: s.data.length })));
+    console.log('📊 [AlbumScreen] Secciones creadas:', sections.map(s => ({ title: s.title, count: s.data.length })));
     
     return sections;
   };
@@ -162,7 +186,27 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
     return flat;
   };
 
-  // Cargar favoritos del estudiante
+  // Obtener todos los estudiantes del usuario
+  const getAllUserStudents = () => {
+    const students: Array<{ _id: string; nombre: string; apellido?: string }> = [];
+    
+    userAssociations.forEach(assoc => {
+      if (assoc.student && (assoc.role?.nombre === 'familyadmin' || assoc.role?.nombre === 'familyviewer')) {
+        // Evitar duplicados
+        if (!students.find(s => s._id === assoc.student._id)) {
+          students.push({
+            _id: assoc.student._id,
+            nombre: assoc.student.nombre,
+            apellido: assoc.student.apellido
+          });
+        }
+      }
+    });
+    
+    return students;
+  };
+
+  // Cargar favoritos de todos los estudiantes del usuario
   const loadFavorites = async (isRefresh = false) => {
     try {
       if (isRefresh) {
@@ -171,30 +215,41 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
         setLoading(true);
       }
       
-      const studentId = getUserStudent();
+      // Obtener todos los estudiantes del usuario
+      const students = getAllUserStudents();
       
-      if (!studentId) {
-        // console.log('⚠️ [AlbumScreen] No se encontró estudiante asociado');
+      if (students.length === 0) {
+        console.log('⚠️ [AlbumScreen] No se encontraron estudiantes asociados');
         setFavorites([]);
         setGroupedFavorites([]);
         setFlatData([]);
         return;
       }
 
-      // console.log('📸 [AlbumScreen] Cargando favoritos para estudiante:', studentId);
-      const favoritesData = await favoriteService.getStudentFavorites(studentId);
-      // console.log('🔍 [AlbumScreen] Datos de favoritos recibidos:', JSON.stringify(favoritesData, null, 2));
-      setFavorites(favoritesData);
+      console.log('📸 [AlbumScreen] Cargando favoritos para', students.length, 'estudiante(s):', students.map(s => s.nombre));
+      
+      // Cargar favoritos de todos los estudiantes en paralelo
+      const favoritesPromises = students.map(student => 
+        favoriteService.getStudentFavorites(student._id)
+      );
+      
+      const favoritesArrays = await Promise.all(favoritesPromises);
+      
+      // Combinar todos los favoritos en un solo array
+      const allFavorites = favoritesArrays.flat();
+      
+      console.log('🔍 [AlbumScreen] Total de favoritos recibidos:', allFavorites.length);
+      setFavorites(allFavorites);
       
       // Agrupar actividades por estudiante
-      const grouped = groupActivitiesByStudent(favoritesData);
+      const grouped = groupActivitiesByStudent(allFavorites);
       setGroupedFavorites(grouped);
       
       // Aplanar datos para FlatList
       const flat = flattenData(grouped);
       setFlatData(flat);
       
-      // console.log('✅ [AlbumScreen] Favoritos cargados y agrupados:', favoritesData.length, 'en', grouped.length, 'secciones');
+      console.log('✅ [AlbumScreen] Favoritos cargados y agrupados:', allFavorites.length, 'en', grouped.length, 'secciones');
     } catch (error) {
       console.error('❌ [AlbumScreen] Error cargando favoritos:', error);
       console.log('Error: No se pudieron cargar los favoritos');
@@ -327,8 +382,10 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
     // });
     
     // Verificar que activity.activity no sea null antes de acceder a sus propiedades
-    if (!activity.activity || !activity.activity.imagenes || activity.activity.imagenes.length === 0) {
-      // console.log('⚠️ [AlbumScreen] Actividad sin imágenes:', activity.activity?.titulo);
+    // Mostrar placeholder si no hay imágenes ni videos
+    const hasMedia = activity.activity?.imagenes && activity.activity.imagenes.length > 0;
+    
+    if (!activity.activity) {
       return null;
     }
 
@@ -336,11 +393,20 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
       <View style={styles.imageContainer}>
         <TouchableOpacity
           style={styles.imageWrapper}
-          onPress={() => handleImagePress(activity, 0)}
+          onPress={() => hasMedia ? handleImagePress(activity, 0) : null}
         >
-          {(() => {
+          {hasMedia ? (() => {
             const firstMedia = getFirstMedia(activity.activity?.imagenes || []);
-            if (!firstMedia) return null;
+            if (!firstMedia) {
+              // Placeholder si no hay media válida
+              return (
+                <View style={styles.placeholderContainer}>
+                  <View style={styles.placeholderIcon}>
+                    <Text style={styles.placeholderIconText}>📷</Text>
+                  </View>
+                </View>
+              );
+            }
 
             return (
               <>
@@ -377,7 +443,14 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
                 )}
               </>
             );
-          })()}
+          })() : (
+            // Placeholder cuando no hay imágenes ni videos
+            <View style={styles.placeholderContainer}>
+              <View style={styles.placeholderIcon}>
+                <Text style={styles.placeholderIconText}>📷</Text>
+              </View>
+            </View>
+          )}
         </TouchableOpacity>
         <Text style={styles.activityTitle} numberOfLines={2}>
           {activity.activity?.titulo || 'Sin título'}
@@ -622,6 +695,28 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  placeholderContainer: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
+  },
+  placeholderIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#D0D0D0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderIconText: {
+    fontSize: 32,
   },
   sectionHeader: {
     backgroundColor: '#F8F9FA',

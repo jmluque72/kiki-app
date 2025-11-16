@@ -10,8 +10,10 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
-  Alert
+  Alert,
+  RefreshControl
 } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
 import { ActiveAssociationService } from '../src/services/activeAssociationService';
@@ -19,25 +21,30 @@ import { toastService } from '../src/services/toastService';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 import { fonts } from '../src/config/fonts';
 import SharedService from '../src/services/sharedService';
+import { processStudentImage, prepareStudentImageForUpload } from '../src/services/studentImageService';
+import { apiClient } from '../src/services/api';
+import { checkImagePermissions } from '../src/utils/permissionUtils';
 
 interface AssociationsScreenProps {
   onBack: () => void;
 }
 
 const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
-  const { user, activeAssociation, associations, refreshActiveAssociation } = useAuth();
-  const { userAssociations } = useInstitution();
+  const { user, activeAssociation, associations, refreshActiveAssociation, logout } = useAuth();
+  const { userAssociations, setUserAssociations } = useInstitution();
   
   // Debug: Verificar que los contextos estén funcionando
   console.log('DEBUG AssociationsScreen - useAuth context:', { user, activeAssociation, associations });
   console.log('DEBUG AssociationsScreen - useInstitution context:', { userAssociations });
   const [loadingAsociaciones, setLoadingAsociaciones] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [asociacionActiva, setAsociacionActiva] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteLastName, setInviteLastName] = useState('');
   const [loadingInvite, setLoadingInvite] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState<string | null>(null);
 
   const isFamilyAdmin = activeAssociation?.role?.nombre === 'familyadmin';
 
@@ -140,6 +147,112 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
     }
   };
 
+  const openGalleryForStudent = async (student: any) => {
+    console.log('📱 [GALLERY] Abriendo galería para estudiante:', student.nombre);
+    console.log('📱 [GALLERY] Student ID:', student._id);
+    
+    // Verificar permisos primero
+    const hasPermissions = await checkImagePermissions();
+    if (!hasPermissions) {
+      console.log('📱 [GALLERY] Permisos denegados');
+      return;
+    }
+    
+    const options = {
+      mediaType: 'photo' as const,
+      includeBase64: false,
+      maxHeight: 2000,
+      maxWidth: 2000,
+      quality: 0.8,
+      selectionLimit: 1,
+    };
+
+    launchImageLibrary(options, (response) => {
+      if (response.didCancel) {
+        console.log('📱 [GALLERY] Usuario canceló la selección');
+        return;
+      }
+
+      if (response.errorCode) {
+        console.error('📱 [GALLERY] Error:', response.errorMessage);
+        Alert.alert('Error', response.errorMessage || 'Error al abrir la galería');
+        return;
+      }
+
+      if (response.assets && response.assets.length > 0 && response.assets[0]?.uri) {
+        handleUploadStudentAvatar(student, response.assets[0].uri);
+      } else {
+        Alert.alert('Error', 'No se encontraron imágenes válidas');
+      }
+    });
+  };
+
+  const refreshAssociations = async () => {
+    try {
+      console.log('🔄 [AssociationsScreen] Refrescando asociaciones...');
+      const updatedAssociations = await SharedService.getUserAssociations();
+      setUserAssociations(updatedAssociations);
+      console.log('✅ [AssociationsScreen] Asociaciones refrescadas:', updatedAssociations.length);
+    } catch (error: any) {
+      console.error('❌ [AssociationsScreen] Error refrescando asociaciones:', error);
+      toastService.error('Error al refrescar asociaciones');
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Refrescar asociaciones
+      await refreshAssociations();
+      // También refrescar la asociación activa
+      await refreshActiveAssociation();
+    } catch (error) {
+      console.error('Error al refrescar:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleUploadStudentAvatar = async (student: any, imageUri: string) => {
+    try {
+      setUploadingAvatar(student._id);
+      console.log('🖼️ [STUDENT AVATAR] Procesando imagen del estudiante:', student.nombre);
+      
+      // Procesar la imagen antes de subirla
+      const processedImage = await processStudentImage(imageUri);
+      console.log('✅ [STUDENT AVATAR] Imagen procesada:', processedImage.width, 'x', processedImage.height);
+      
+      // Preparar la imagen para subir
+      const formData = prepareStudentImageForUpload(processedImage);
+      
+      const response = await apiClient.put(`/students/${student._id}/avatar`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      const result = response.data;
+      
+      if (result.success) {
+        console.log('✅ [STUDENT AVATAR] Avatar actualizado exitosamente');
+        toastService.success('Avatar actualizado exitosamente');
+        
+        // Refrescar la asociación activa para obtener el nuevo avatar
+        await refreshActiveAssociation();
+        // Refrescar las asociaciones para ver el nuevo avatar en la lista
+        await refreshAssociations();
+      } else {
+        throw new Error(result.message || 'Error al actualizar el avatar');
+      }
+    } catch (error: any) {
+      console.error('❌ [STUDENT AVATAR] Error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Error al actualizar el avatar';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setUploadingAvatar(null);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -176,11 +289,43 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
             <Text style={styles.loadingText}>Cargando asociaciones...</Text>
           </View>
         ) : userAssociations.length === 0 ? (
-          <Text style={styles.emptyText}>No tienes asociaciones</Text>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No tienes asociaciones</Text>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={() => {
+                Alert.alert(
+                  'Cerrar Sesión',
+                  '¿Estás seguro de que deseas cerrar sesión?',
+                  [
+                    {
+                      text: 'Cancelar',
+                      style: 'cancel'
+                    },
+                    {
+                      text: 'Cerrar Sesión',
+                      style: 'destructive',
+                      onPress: () => logout()
+                    }
+                  ]
+                );
+              }}
+            >
+              <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <FlatList
             data={userAssociations}
             keyExtractor={(item) => item._id}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#0E5FCE']}
+                tintColor="#0E5FCE"
+              />
+            }
             renderItem={({ item }) => {
               const itemIdString = String(item._id);
               const asociacionActivaString = String(asociacionActiva);
@@ -198,59 +343,86 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
               console.log('  === COMPARISON ===');
               
               return (
-                <TouchableOpacity
+                <View
                   style={[
                     styles.asociacionItem,
                     isActive && styles.asociacionItemActiva
                   ]}
-                  onPress={() => handleSelectAsociacion(item._id)}
-                  disabled={isActive}
                 >
-                  <View style={styles.asociacionInfo}>
-                    <View style={styles.asociacionHeader}>
-                      <Text style={styles.asociacionInstitucion}>{item.account.nombre}</Text>
-                      {isActive && (
-                        <View style={styles.asociacionActivaBadge}>
-                          <Text style={styles.asociacionActivaText}>ACTIVA</Text>
+                  <TouchableOpacity
+                    style={styles.asociacionTouchable}
+                    onPress={() => handleSelectAsociacion(item._id)}
+                    disabled={isActive}
+                  >
+                    <View style={styles.asociacionInfo}>
+                      <View style={styles.asociacionHeader}>
+                        <Text style={styles.asociacionInstitucion}>{item.account.nombre}</Text>
+                        {isActive && (
+                          <View style={styles.asociacionActivaBadge}>
+                            <Text style={styles.asociacionActivaText}>ACTIVA</Text>
+                          </View>
+                        )}
+                      </View>
+                      {item.division && (
+                        <Text style={styles.asociacionDivision}>{item.division.nombre}</Text>
+                      )}
+                      {item.student && (
+                        <View style={styles.studentInfoContainer}>
+                          <View style={styles.studentAvatarContainer}>
+                            {item.student.avatar ? (
+                              <Image 
+                                source={{ uri: item.student.avatar }} 
+                                style={styles.studentAvatar}
+                              />
+                            ) : (
+                              <View style={styles.studentAvatarPlaceholder}>
+                                <Text style={styles.studentAvatarText}>
+                                  {item.student.nombre.charAt(0)}
+                                </Text>
+                              </View>
+                            )}
+                            {/* Botón de cámara sobre el avatar - solo en la asociación activa y si es familyadmin */}
+                            {isActive && (item.role?.nombre === 'familyadmin' || isFamilyAdmin) && (
+                              <View style={styles.editStudentAvatarButton}>
+                                <TouchableOpacity
+                                  style={styles.editStudentAvatarButtonInner}
+                                  onPress={() => {
+                                    openGalleryForStudent(item.student);
+                                  }}
+                                  disabled={uploadingAvatar === item.student._id}
+                                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                  {uploadingAvatar === item.student._id ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                  ) : (
+                                    <Image
+                                      source={require('../assets/design/icons/camera.png')}
+                                      style={styles.editStudentAvatarIcon}
+                                      resizeMode="contain"
+                                    />
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.studentTextContainer}>
+                            <Text style={styles.studentName}>
+                              {item.student.nombre} {item.student.apellido}
+                            </Text>
+                            <Text style={styles.studentRole}>
+                              {getRoleDisplayName(item.role?.nombre || '')}
+                            </Text>
+                          </View>
                         </View>
                       )}
+                      {!item.student && (
+                        <Text style={styles.asociacionRole}>
+                          {getRoleDisplayName(item.role?.nombre || '')}
+                        </Text>
+                      )}
                     </View>
-                    {item.division && (
-                      <Text style={styles.asociacionDivision}>{item.division.nombre}</Text>
-                    )}
-                    {item.student && (
-                      <View style={styles.studentInfoContainer}>
-                        <View style={styles.studentAvatarContainer}>
-                          {item.student.avatar ? (
-                            <Image 
-                              source={{ uri: item.student.avatar }} 
-                              style={styles.studentAvatar}
-                            />
-                          ) : (
-                            <View style={styles.studentAvatarPlaceholder}>
-                              <Text style={styles.studentAvatarText}>
-                                {item.student.nombre.charAt(0)}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.studentTextContainer}>
-                          <Text style={styles.studentName}>
-                            {item.student.nombre} {item.student.apellido}
-                          </Text>
-                          <Text style={styles.studentRole}>
-                            {getRoleDisplayName(item.role?.nombre || '')}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                    {!item.student && (
-                      <Text style={styles.asociacionRole}>
-                        {getRoleDisplayName(item.role?.nombre || '')}
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </View>
               );
             }}
           />
@@ -369,11 +541,30 @@ const styles = StyleSheet.create({
     color: '#666666',
     marginTop: 10,
   },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
   emptyText: {
     fontSize: 16,
     color: '#999999',
     textAlign: 'center',
-    marginTop: 50,
+    marginBottom: 30,
+  },
+  logoutButton: {
+    backgroundColor: '#FF6B6B',
+    paddingVertical: 16,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: fonts.bold,
   },
   asociacionItem: {
     backgroundColor: '#F5F5F5',
@@ -424,6 +615,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   studentAvatarContainer: {
+    position: 'relative',
     marginRight: 10,
   },
   studentAvatar: {
@@ -444,6 +636,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
+  editStudentAvatarButton: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#0E5FCE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  editStudentAvatarButtonInner: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editStudentAvatarIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#FFFFFF',
+  },
   studentTextContainer: {
     flex: 1,
   },
@@ -460,6 +675,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666666',
     marginTop: 5,
+  },
+  asociacionTouchable: {
+    flex: 1,
   },
   // Estilos para el botón de invitar
   inviteSection: {

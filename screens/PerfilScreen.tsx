@@ -242,29 +242,36 @@ const PerfilScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenA
       
       console.log('🔍 [PerfilScreen] Actualizando perfil con datos:', updateData);
       
-      // Usar el endpoint de actualización de perfil
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/users/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await AsyncStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify(updateData)
-      });
+      // Usar apiClient que ya tiene el token configurado
+      const response = await apiClient.put('/users/profile', updateData);
       
-      const result = await response.json();
-      
-      if (result.success) {
+      if (response.data.success) {
         console.log('✅ [PerfilScreen] Perfil actualizado exitosamente');
-        setUser(result.data);
+        const updatedUserData = response.data.data?.user || response.data.data;
+        
+        // Mapear la respuesta del backend al formato esperado por el contexto
+        const updatedUser = {
+          ...authUser, // Mantener todos los campos existentes
+          ...updatedUserData,
+          name: updatedUserData.nombre || updatedUserData.name || authUser?.name,
+          telefono: updatedUserData.telefono || updatedUserData.phone,
+          phone: updatedUserData.telefono || updatedUserData.phone,
+        };
+        
+        // Actualizar el usuario en el contexto de autenticación (esto también lo guarda en AsyncStorage)
+        login(updatedUser);
+        
+        // Actualizar el estado local
+        setUser(updatedUser);
         setIsEditing(false);
-        console.log('Éxito', 'Perfil actualizado correctamente');
+        toastService.success('Éxito', 'Perfil actualizado correctamente');
       } else {
-        throw new Error(result.message || 'Error al actualizar el perfil');
+        throw new Error(response.data.message || 'Error al actualizar el perfil');
       }
     } catch (error: any) {
       console.error('❌ [PerfilScreen] Error al actualizar perfil:', error);
-      console.log('Error', error.message || 'Error al actualizar el perfil');
+      const errorMessage = error.response?.data?.message || error.message || 'Error al actualizar el perfil';
+      Alert.alert('Error', errorMessage);
     } finally {
       hideLoading();
     }

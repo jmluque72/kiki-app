@@ -500,7 +500,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
       {onBack && (
         <View style={styles.headerContainer}>
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
-            <Text style={styles.backButtonText}>← Volver</Text>
+            <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Registrar Acciones</Text>

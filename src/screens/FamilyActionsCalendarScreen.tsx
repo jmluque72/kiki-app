@@ -65,22 +65,18 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
   const { user, activeAssociation } = useAuth();
   const { userAssociations } = useInstitution();
   
-  // Obtener estudiantes desde las asociaciones del usuario (NO desde API)
-  const students = React.useMemo(() => {
-    const familyStudents: Student[] = [];
-    userAssociations.forEach(assoc => {
-      if (assoc.student && (assoc.role?.nombre === 'familyadmin' || assoc.role?.nombre === 'familyviewer')) {
-        familyStudents.push({
-          _id: assoc.student._id,
-          nombre: assoc.student.nombre,
-          apellido: assoc.student.apellido || '',
-          avatar: assoc.student.avatar
-        });
-      }
-    });
-    console.log('👨‍👩‍👧 [FAMILY ACTIONS] Estudiantes de asociaciones:', familyStudents.length);
-    return familyStudents;
-  }, [userAssociations]);
+  // Usar el estudiante activo directamente desde activeAssociation
+  const activeStudent = React.useMemo(() => {
+    if (activeAssociation?.student) {
+      return {
+        _id: activeAssociation.student._id,
+        nombre: activeAssociation.student.nombre,
+        apellido: activeAssociation.student.apellido || '',
+        avatar: activeAssociation.student.avatar
+      } as Student;
+    }
+    return null;
+  }, [activeAssociation]);
   
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -91,12 +87,15 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
   // Solo vista de semana
   const viewMode: 'week' = 'week';
 
-  // Seleccionar el primer estudiante automáticamente
+  // Usar el estudiante activo automáticamente
   useEffect(() => {
-    if (students.length > 0 && !selectedStudent) {
-      setSelectedStudent(students[0]);
+    if (activeStudent && !selectedStudent) {
+      setSelectedStudent(activeStudent);
+    } else if (activeStudent && selectedStudent?._id !== activeStudent._id) {
+      // Actualizar si cambió el estudiante activo
+      setSelectedStudent(activeStudent);
     }
-  }, [students]);
+  }, [activeStudent]);
 
   useEffect(() => {
     if (selectedStudent) {
@@ -105,10 +104,10 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
   }, [selectedStudent, currentDate]);
 
   useEffect(() => {
-    if (selectedDate && students.length > 0) {
+    if (selectedDate && selectedStudent) {
       loadDayActions();
     }
-  }, [selectedDate, students]);
+  }, [selectedDate, selectedStudent]);
 
   const loadCalendarData = async () => {
     if (!selectedStudent) return;
@@ -124,7 +123,9 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
       const endDateStr = endDate.toISOString().split('T')[0];
 
       // Cargar acciones de TODOS los estudiantes de las asociaciones
-      const promises = students.map(student => 
+      // Usar solo el estudiante activo
+      if (!selectedStudent) return;
+      const promises = [selectedStudent].map(student => 
         apiClient.get(
           `/api/student-actions/log/student/${student._id}?fechaInicio=${startDateStr}&fechaFin=${endDateStr}`
         ).catch(err => {
@@ -147,14 +148,16 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
   };
 
   const loadDayActions = async () => {
-    if (students.length === 0) {
+    if (!selectedStudent) {
       setDayActions([]);
       return;
     }
 
     try {
       // Cargar acciones de TODOS los estudiantes para el día seleccionado
-      const promises = students.map(student => 
+      // Usar solo el estudiante activo
+      if (!selectedStudent) return;
+      const promises = [selectedStudent].map(student => 
         apiClient.get(
           `/api/student-actions/log/student/${student._id}?fechaInicio=${selectedDate}&fechaFin=${selectedDate}`
         ).catch(err => {
@@ -233,17 +236,6 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
     setCurrentDate(newDate);
   };
 
-  const renderStudent = ({ item }: { item: Student }) => (
-    <TouchableOpacity
-      style={[
-        styles.studentItem,
-        selectedStudent?._id === item._id && styles.selectedStudent
-      ]}
-      onPress={() => setSelectedStudent(item)}
-    >
-      <Text style={styles.studentName}>{item.nombre} {item.apellido}</Text>
-    </TouchableOpacity>
-  );
 
   const renderCalendarDay = ({ item }: { item: CalendarDay }) => (
     <TouchableOpacity
@@ -321,7 +313,7 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
       {onBack && (
         <View style={styles.headerContainer}>
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
-            <Text style={styles.backButtonText}>← Volver</Text>
+            <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Calendario de Acciones</Text>
@@ -334,24 +326,12 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
         <Text style={styles.title}>Calendario de Acciones</Text>
       )}
       
-      {/* Selector de estudiante - Solo si hay más de uno */}
-      {students.length > 1 ? (
+      {/* Mostrar solo el estudiante activo */}
+      {selectedStudent && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Seleccionar Estudiante</Text>
-          <FlatList
-            data={students}
-            renderItem={renderStudent}
-            keyExtractor={(item) => item._id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.studentsList}
-          />
+          <Text style={styles.sectionTitle}>Estudiante: {selectedStudent.nombre} {selectedStudent.apellido}</Text>
         </View>
-      ) : students.length === 1 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Estudiante: {students[0]?.nombre} {students[0]?.apellido}</Text>
-        </View>
-      ) : null}
+      )}
 
       {/* Controles de navegación */}
       <View style={styles.navigationControls}>

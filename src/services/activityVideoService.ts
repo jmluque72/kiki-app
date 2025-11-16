@@ -87,10 +87,10 @@ export const validateVideoDuration = (video: any, maxDurationSeconds: number = 3
 /**
  * Valida el tamaño de un video
  * @param video - Objeto de video
- * @param maxSizeMB - Tamaño máximo en MB (por defecto 10MB)
+ * @param maxSizeMB - Tamaño máximo en MB (por defecto 50MB para videos de ~30 segundos)
  * @returns true si el video es válido, false si es demasiado grande
  */
-export const validateVideoSize = (video: any, maxSizeMB: number = 10): boolean => {
+export const validateVideoSize = (video: any, maxSizeMB: number = 50): boolean => {
   if (!video.fileSize) {
     console.warn('📹 [ACTIVITY VIDEO] No se pudo determinar el tamaño del video');
     return true; // Permitir si no se puede determinar el tamaño
@@ -110,10 +110,10 @@ export const validateVideoSize = (video: any, maxSizeMB: number = 10): boolean =
  * Filtra videos válidos por duración y tamaño
  * @param videos - Array de videos
  * @param maxDurationSeconds - Duración máxima en segundos (por defecto 30)
- * @param maxSizeMB - Tamaño máximo en MB (por defecto 10MB)
+ * @param maxSizeMB - Tamaño máximo en MB (por defecto 50MB para videos de ~30 segundos)
  * @returns Array de videos válidos
  */
-export const filterValidVideos = (videos: any[], maxDurationSeconds: number = 30, maxSizeMB: number = 10): any[] => {
+export const filterValidVideos = (videos: any[], maxDurationSeconds: number = 30, maxSizeMB: number = 50): any[] => {
   return videos.filter(video => 
     validateVideoDuration(video, maxDurationSeconds) && 
     validateVideoSize(video, maxSizeMB)
