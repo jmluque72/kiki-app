@@ -328,16 +328,28 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
                   );
                 }
                 
-                // Si no hay avatar del estudiante, mostrar placeholder
+                // Si no hay avatar del estudiante, mostrar logo de Kiki
                 console.log('⚠️ [CommonHeader] No se encontró avatar del estudiante para', currentRole);
                 console.log('⚠️ [CommonHeader] activeAssociation?.student:', activeAssociation?.student);
                 console.log('⚠️ [CommonHeader] activeStudent:', activeStudent);
-                return <Text style={styles.avatarIcon}>👤</Text>;
+                return (
+                  <Image
+                    source={require('../assets/design/icons/kiki_logo_header.png')}
+                    style={styles.avatarLogo}
+                    resizeMode="contain"
+                  />
+                );
               }
               
-              // Para otros roles, mostrar placeholder
-              console.log('🖼️ [CommonHeader] Mostrando placeholder para rol:', currentRole);
-              return <Text style={styles.avatarIcon}>👤</Text>;
+              // Para otros roles, mostrar logo de Kiki
+              console.log('🖼️ [CommonHeader] Mostrando logo de Kiki para rol:', currentRole);
+              return (
+                <Image
+                  source={require('../assets/design/icons/kiki_logo_header.png')}
+                  style={styles.avatarLogo}
+                  resizeMode="contain"
+                />
+              );
             })()}
           </View>
         </View>
@@ -477,6 +489,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 30,
+  },
+  avatarLogo: {
+    width: '80%',
+    height: '80%',
   },
   notificationBadge: {
     position: 'absolute',

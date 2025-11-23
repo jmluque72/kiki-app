@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../src/utils/storage';
 import { apiClient, setAuthToken, setGlobalLogout } from '../src/services/api';
 import { ActiveAssociationService, ActiveAssociation } from '../src/services/activeAssociationService';
 import { HybridAuthService } from '../src/services/hybridAuthService';

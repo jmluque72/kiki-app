@@ -14,7 +14,7 @@ import {
   Alert,
   RefreshControl
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../src/utils/storage';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useLoading } from '../contexts/LoadingContext';
 import { useAuth } from "../contexts/AuthContextHybrid"
@@ -22,6 +22,9 @@ import { ActiveAssociationService } from '../src/services/activeAssociationServi
 import AddAssociationPopup from '../components/AddAssociationPopup';
 import CommonHeader from '../components/CommonHeader';
 import SideMenu from '../components/SideMenu';
+import FormulariosScreen from './FormulariosScreen';
+import CompleteFormScreen from './CompleteFormScreen';
+import FormRequestService, { FormRequest } from '../src/services/formRequestService';
 
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { UserService } from '../src/services/userService';
@@ -90,6 +93,12 @@ const PerfilScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenA
 
   // Estado para pantalla de cambio de contraseña
   const [showChangePassword, setShowChangePassword] = useState(false);
+  
+  // Estados para formularios
+  const [showFormularios, setShowFormularios] = useState(false);
+  const [showCompleteForm, setShowCompleteForm] = useState(false);
+  const [selectedFormRequest, setSelectedFormRequest] = useState<FormRequest | null>(null);
+  const [pendingFormsCount, setPendingFormsCount] = useState(0);
 
   // Usar la primera institución si no hay ninguna seleccionada
   const effectiveInstitution = selectedInstitution || (userAssociations.length > 0 ? userAssociations[0] : null);
@@ -837,6 +846,11 @@ const PerfilScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenA
                   closeMenu();
                   onOpenActiveAssociation?.();
                 }}
+                openFormularios={() => {
+                  closeMenu();
+                  setShowFormularios(true);
+                }}
+                pendingFormsCount={pendingFormsCount}
               />
             </View>
           </View>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
   Modal,
   Platform,
   Switch,
-  RefreshControl
+  RefreshControl,
+  FlatList
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed Picker import - using custom picker instead
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useEvents } from '../src/hooks/useEvents';
@@ -454,24 +455,31 @@ const EventosScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotification
                   <Text style={styles.pickerCloseText}>✕</Text>
                 </TouchableOpacity>
               </View>
-              <Picker
-                selectedValue={eventoHora || '09:00'}
-                onValueChange={(itemValue) => {
-                  setEventoHora(itemValue);
-                  const [hours, minutes] = itemValue.split(':');
-                  const newTime = new Date();
-                  newTime.setHours(parseInt(hours), parseInt(minutes));
-                  setSelectedTime(newTime);
-                }}
-              >
+              <ScrollView style={styles.pickerScrollView}>
                 {generateTimeOptions().map((option) => (
-                  <Picker.Item
+                  <TouchableOpacity
                     key={option.value}
-                    label={option.label}
-                    value={option.value}
-                  />
+                    style={[
+                      styles.pickerOption,
+                      eventoHora === option.value && styles.pickerOptionSelected
+                    ]}
+                    onPress={() => {
+                      setEventoHora(option.value);
+                      const [hours, minutes] = option.value.split(':');
+                      const newTime = new Date();
+                      newTime.setHours(parseInt(hours), parseInt(minutes));
+                      setSelectedTime(newTime);
+                    }}
+                  >
+                    <Text style={[
+                      styles.pickerOptionText,
+                      eventoHora === option.value && styles.pickerOptionTextSelected
+                    ]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
-              </Picker>
+              </ScrollView>
               <TouchableOpacity
                 style={styles.pickerConfirmButton}
                 onPress={() => setShowTimePicker(false)}
@@ -740,6 +748,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  pickerScrollView: {
+    maxHeight: 300,
+  },
+  pickerOption: {
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  pickerOptionSelected: {
+    backgroundColor: '#E3F2FD',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: '#333333',
+  },
+  pickerOptionTextSelected: {
+    color: '#0E5FCE',
+    fontWeight: 'bold',
   },
   loadingContainer: {
     alignItems: 'center',

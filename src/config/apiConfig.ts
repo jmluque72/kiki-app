@@ -12,7 +12,7 @@ const isEmulator = () => {
 };
 
 // Configuración base del API
-export const getApiBaseUrl = () => {
+export const getApiBaseUrlLocal = () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost
@@ -32,7 +32,7 @@ export const getApiBaseUrl = () => {
 
 
 // Configuración base del API
-export const getApiBaseUrlLocal = () => {
+export const getApiBaseUrl= () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost
@@ -62,6 +62,9 @@ export const API_FULL_URL = `${API_BASE_URL}${API_PATH}`;
 
 // Configuración de timeout (30 segundos para operaciones que requieren múltiples consultas a la DB)
 export const API_TIMEOUT = 30000;
+
+// Timeout extendido para operaciones de upload de archivos grandes (videos, etc.)
+export const API_UPLOAD_TIMEOUT = 300000; // 5 minutos para uploads
 
 // Headers por defecto
 export const DEFAULT_HEADERS = {

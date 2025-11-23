@@ -33,7 +33,12 @@ const AcercaDeScreen: React.FC<AcercaDeScreenProps> = ({ onBack }) => {
       </View>
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
         {/* Logo y título */}
         <View style={styles.logoContainer}>
           <Image 
@@ -111,10 +116,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 15,
-    paddingTop: 50, // Agregar padding superior para el notch
+    paddingTop: 50,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -123,24 +127,29 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
-    marginLeft: 5, // Agregar margen izquierdo
+    marginRight: 15,
   },
   backButtonText: {
     fontSize: 18,
-    color: '#0E5FCE',
+    color: '#374151',
     fontWeight: 'bold',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1F2937',
+    flex: 1,
   },
   headerSpacer: {
     width: 40,
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
     paddingHorizontal: 20,
+    paddingBottom: 40, // Espacio al final para permitir scroll completo
   },
   logoContainer: {
     alignItems: 'center',

@@ -45,7 +45,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   const [sendingNotification, setSendingNotification] = useState(false);
 
   const { notifications, recipients, loading, markAsRead, deleteNotification, sendNotification, loadRecipients, loadNotifications } = useNotifications();
-  const { selectedInstitution } = useInstitution();
+  const { selectedInstitution, getActiveStudent } = useInstitution();
   const { user } = useAuth();
   const { showLoading, hideLoading } = useLoading();
   const { showError } = useCustomAlert();
@@ -319,21 +319,36 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     const senderName = item.sender?.name || item.sender?.nombre || 'Desconocido';
     
     // Obtener nombre del estudiante si es familyadmin o familyviewer
+    // IMPORTANTE: Solo mostrar el estudiante que está asociado al tutor actual
     let studentName = null;
     if ((isFamilyAdmin || isFamilyViewer) && item.recipients && item.recipients.length > 0) {
-      // El servidor ya combina nombre y apellido en el campo 'nombre' para estudiantes
-      // Buscar el primer recipient que tenga nombre (puede ser estudiante o usuario)
-      const studentRecipient = item.recipients.find((recipient: any) => 
-        recipient.nombre && !recipient.name // Si tiene 'nombre' pero no 'name', es estudiante
-      );
-      if (studentRecipient && studentRecipient.nombre) {
-        studentName = studentRecipient.nombre;
-      } else {
-        // Si no encontramos uno con 'nombre', buscar cualquier recipient con nombre
-        const anyRecipient = item.recipients.find((recipient: any) => recipient.nombre);
-        if (anyRecipient) {
-          studentName = anyRecipient.nombre;
+      // Obtener el estudiante activo del tutor actual
+      const activeStudent = getActiveStudent();
+      const activeStudentId = activeStudent?._id?.toString();
+      
+      console.log('🔍 [NOTIFICATION] Buscando estudiante del tutor actual');
+      console.log('🔍 [NOTIFICATION] Active student ID:', activeStudentId);
+      console.log('🔍 [NOTIFICATION] Recipients:', item.recipients.map((r: any) => ({
+        id: r._id?.toString(),
+        nombre: r.nombre,
+        name: r.name
+      })));
+      
+      if (activeStudentId) {
+        // Buscar el recipient que coincida con el estudiante activo del tutor
+        const studentRecipient = item.recipients.find((recipient: any) => {
+          const recipientId = recipient._id?.toString() || recipient.toString();
+          return recipientId === activeStudentId && recipient.nombre && !recipient.name;
+        });
+        
+        if (studentRecipient && studentRecipient.nombre) {
+          studentName = studentRecipient.nombre;
+          console.log('✅ [NOTIFICATION] Estudiante encontrado:', studentName);
+        } else {
+          console.log('⚠️ [NOTIFICATION] No se encontró el estudiante del tutor en los recipients');
         }
+      } else {
+        console.log('⚠️ [NOTIFICATION] No hay estudiante activo para el tutor');
       }
     }
     
@@ -395,6 +410,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
               hour: '2-digit',
               minute: '2-digit'
             })}
+          </Text>
+          
+          {/* ID de la notificación para debugging */}
+          <Text style={styles.notificationId}>
+            ID: {item._id}
           </Text>
         </TouchableOpacity>
         
@@ -704,6 +724,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                         })}
                       </Text>
                     </View>
+                    <View style={styles.metaInfoItem}>
+                      <Text style={styles.metaInfoLabel}>ID:</Text>
+                      <Text style={[styles.metaInfoValue, styles.notificationIdDetails]}>
+                        {selectedNotificationDetails._id}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -975,6 +1001,13 @@ const styles = StyleSheet.create({
   notificationDate: {
     fontSize: 12,
     color: '#999999',
+  },
+  notificationId: {
+    fontSize: 10,
+    color: '#666666',
+    fontFamily: 'monospace',
+    marginTop: 4,
+    opacity: 0.7,
   },
   loadingText: {
     textAlign: 'center',
@@ -1449,6 +1482,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333333',
     fontWeight: '500',
+  },
+  notificationIdDetails: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: '#666666',
   },
   // Estilos para confirmación simple de tutores
   simpleConfirmationContainer: {

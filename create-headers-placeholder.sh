@@ -6,28 +6,49 @@ echo "🔧 Creando headers placeholder para módulos nativos..."
 ASYNC_STORAGE_DIR="node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni"
 mkdir -p "$ASYNC_STORAGE_DIR"
 
-cat > "$ASYNC_STORAGE_DIR/rnasyncstorage.h" << 'EOF'
+# NO sobrescribir si el archivo ya existe y fue generado por codegen
+if [ -f "$ASYNC_STORAGE_DIR/rnasyncstorage.h" ] && grep -q "react-native-codegen\|@generated" "$ASYNC_STORAGE_DIR/rnasyncstorage.h" 2>/dev/null; then
+  echo "⏭️  Saltando: $ASYNC_STORAGE_DIR/rnasyncstorage.h (ya existe y fue generado por codegen)"
+else
+  cat > "$ASYNC_STORAGE_DIR/rnasyncstorage.h" << 'EOF'
 // Placeholder header file
 // Este archivo evita errores de compilación cuando el código generado no existe
 #ifndef RNASYNCSTORAGE_H
 #define RNASYNCSTORAGE_H
 
+#include <jsi/jsi.h>
+#include <ReactCommon/TurboModule.h>
+#include <memory>
+
 namespace facebook {
 namespace react {
 
-// Placeholder class
-class AsyncStorageSpecJSI {
+// Forward declarations
+class CallInvoker;
+
+// Placeholder TurboModule para AsyncStorage
+class AsyncStorageSpecJSI : public TurboModule {
 public:
+    AsyncStorageSpecJSI(std::shared_ptr<CallInvoker> jsInvoker);
     virtual ~AsyncStorageSpecJSI() = default;
 };
+
+// ModuleProvider function - AsyncStorage usa JavaTurboModule
+std::shared_ptr<TurboModule> rnasyncstorage_ModuleProvider(
+    const std::string moduleName,
+    const JavaTurboModule::InitParams &params
+) {
+    // Esta función será implementada por el código generado o por JavaTurboModule
+    return nullptr;
+}
 
 } // namespace react
 } // namespace facebook
 
 #endif // RNASYNCSTORAGE_H
 EOF
-
-echo "✅ Creado: $ASYNC_STORAGE_DIR/rnasyncstorage.h"
+  echo "✅ Creado: $ASYNC_STORAGE_DIR/rnasyncstorage.h"
+fi
 
 # Crear headers para otros módulos que puedan necesitarlos
 create_header() {
@@ -89,6 +110,12 @@ create_component_header() {
   local guard_name=$(echo "${component_name}_${header_name}" | tr '[:lower:]' '[:upper:]' | tr '/' '_' | sed 's/\./_/g')
   
   mkdir -p "$(dirname "$full_path")"
+  
+  # NO sobrescribir si el archivo ya existe y fue generado por codegen
+  if [ -f "$full_path" ] && grep -q "react-native-codegen" "$full_path" 2>/dev/null; then
+    echo "⏭️  Saltando: $full_path (ya existe y fue generado por codegen)"
+    return
+  fi
   
   if [ "$header_name" = "Props.h" ]; then
     cat > "$full_path" << EOF

@@ -311,14 +311,11 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
     <View style={styles.container}>
       {/* Header con botón de volver */}
       {onBack && (
-        <View style={styles.headerContainer}>
+        <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Calendario de Acciones</Text>
-          </View>
-          <View style={styles.backButtonPlaceholder} />
+          <Text style={styles.headerTitle}>Calendario de Acciones</Text>
         </View>
       )}
       
@@ -422,46 +419,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     padding: 16,
   },
-  headerContainer: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
     paddingTop: 50,
-    paddingBottom: 10,
-    paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    marginHorizontal: -16,
-    marginTop: -16,
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    minWidth: 80,
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 15,
   },
   backButtonText: {
-    fontSize: 16,
-    color: '#0E5FCE',
-    fontWeight: '600',
-  },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: -1,
+    fontSize: 18,
+    color: '#374151',
+    fontWeight: 'bold',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#0E5FCE',
-    textAlign: 'center',
-  },
-  backButtonPlaceholder: {
-    minWidth: 80,
+    color: '#1F2937',
+    flex: 1,
   },
   title: {
     fontSize: 24,

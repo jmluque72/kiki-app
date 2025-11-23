@@ -5,7 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Image
+  Image,
+  Alert
 } from 'react-native';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -22,9 +23,28 @@ interface SideMenuProps {
   onOpenTerminosCondiciones?: () => void;
   onOpenAcciones?: () => void;
   onOpenRetirar?: () => void;
+  onOpenFormularios?: () => void;
+  pendingFormsCount?: number;
+  // Nueva prop para abrir formularios directamente
+  openFormularios?: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAssociation, onOpenAssociations, onOpenQuienRetira, onOpenFamilyViewers, onOpenAcercaDe, onOpenTerminosCondiciones, onOpenAcciones, onOpenRetirar }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ 
+  navigation, 
+  onClose, 
+  onOpenActiveAssociation, 
+  onOpenAssociations, 
+  onOpenQuienRetira, 
+  onOpenFamilyViewers, 
+  onOpenAcercaDe, 
+  onOpenTerminosCondiciones, 
+  onOpenAcciones, 
+  onOpenRetirar, 
+  onOpenFormularios,
+  openFormularios,
+  pendingFormsCount = 0 
+}) => {
+  
   const { user, logout, associations, activeAssociation } = useAuth();
   const { selectedInstitution } = useInstitution();
 
@@ -76,9 +96,27 @@ const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAs
         onOpenFamilyViewers?.();
       }
     }] : []),
-        {
-          id: 'documentos',
-          title: 'Documentos',
+    // Solo mostrar "Formularios" para padres (familyadmin)
+    ...(isFamilyAdmin ? [{
+      id: 'formularios',
+      title: 'Formularios',
+      onPress: () => {
+        onClose();
+        // Usar openFormularios si está disponible, sino onOpenFormularios
+        const handler = openFormularios || onOpenFormularios;
+        if (handler) {
+          handler();
+        }
+      },
+      badge: pendingFormsCount > 0 ? pendingFormsCount : undefined
+    }] : []),
+  ];
+  
+  const finalMenuItems = [
+    ...menuItems,
+    {
+      id: 'documentos',
+      title: 'Documentos',
           onPress: () => {
             onClose();
             onOpenTerminosCondiciones?.();
@@ -141,13 +179,20 @@ const SideMenu: React.FC<SideMenuProps> = ({ navigation, onClose, onOpenActiveAs
 
       {/* Lista de opciones del menú */}
       <ScrollView style={styles.menuContainer}>
-        {menuItems.map((item) => (
+        {finalMenuItems.map((item) => (
           <TouchableOpacity
             key={item.id}
             style={styles.menuItem}
             onPress={item.onPress}
           >
-            <Text style={styles.menuTitle}>{item.title}</Text>
+            <View style={styles.menuItemContent}>
+              <Text style={styles.menuTitle}>{item.title}</Text>
+              {item.badge !== undefined && item.badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{item.badge}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -248,10 +293,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     // Borde izquierdo azul removido
   },
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   menuTitle: {
     fontSize: 16,
     color: '#333333',
     fontWeight: '600',
+    flex: 1,
+  },
+  badge: {
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   footer: {
     padding: 20,

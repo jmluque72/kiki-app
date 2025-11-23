@@ -416,7 +416,7 @@ const RetirarScreen: React.FC<RetirarScreenProps> = ({ onBack }) => {
                 </TouchableOpacity>
               )}
               
-              {/* Tutor Secundario (familyviewer) */}
+              {/* Visualizador (familyviewer) */}
               {selectedStudentForWithdrawal?.tutor?.familyviewer && (
                 <TouchableOpacity
                   style={styles.withdrawalOption}
@@ -426,7 +426,7 @@ const RetirarScreen: React.FC<RetirarScreenProps> = ({ onBack }) => {
                     {selectedStudentForWithdrawal.tutor.familyviewer.name}
                     {selectedStudentForWithdrawal.tutor.familyviewer.dni ? ` - DNI: ${selectedStudentForWithdrawal.tutor.familyviewer.dni}` : ''}
                   </Text>
-                  <Text style={styles.withdrawalOptionSubtext}>Tutor Secundario</Text>
+                  <Text style={styles.withdrawalOptionSubtext}>Visualizador</Text>
                 </TouchableOpacity>
               )}
               
@@ -481,23 +481,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
+    paddingTop: 50,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     marginRight: 15,
-    padding: 5,
   },
   backButtonText: {
-    fontSize: 24,
-    color: '#0E5FCE',
+    fontSize: 18,
+    color: '#374151',
     fontWeight: 'bold',
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: '#0E5FCE',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    flex: 1,
   },
   scrollContainer: {
     flex: 1,

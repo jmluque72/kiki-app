@@ -385,9 +385,15 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
                         );
                       })()
                     ) : (
-                      // Placeholder cuando no hay imagen ni video
+                      // Placeholder cuando no hay imagen ni video - mostrar logo de Kiki
                       <View style={styles.timelineImageContainer}>
-                        <View style={styles.placeholderContainer} />
+                        <View style={styles.placeholderContainer}>
+                          <Image
+                            source={require('../assets/design/icons/kiki_logo_header.png')}
+                            style={styles.placeholderLogo}
+                            resizeMode="contain"
+                          />
+                        </View>
                       </View>
                     )}
                   </View>
@@ -538,9 +544,15 @@ const styles = StyleSheet.create({
     width: 110,
     height: 110,
     borderRadius: 55,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
     borderWidth: 3,
     borderColor: '#FF8C42',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderLogo: {
+    width: 70,
+    height: 70,
   },
   timelineImage: {
     width: 110,

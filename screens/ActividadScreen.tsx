@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
   StyleSheet,
   FlatList,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Keyboard
 } from 'react-native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -77,6 +78,44 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
   
   // Custom Alert hook
   const { showSuccess, showError, isVisible, alertConfig } = useCustomAlert();
+  
+  // Estado para detectar cuando el teclado está visible
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  
+  // Referencias para scroll automático
+  const scrollViewRef = useRef<ScrollView>(null);
+  const descripcionInputRef = useRef<TextInput>(null);
+  const descripcionContainerRef = useRef<View>(null);
+  
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => {
+        setKeyboardVisible(true);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  // Efecto para hacer scroll al final cuando se seleccionan imágenes/videos
+  useEffect(() => {
+    if (selectedImages.length > 0 && scrollViewRef.current) {
+      // Delay más largo para asegurar que el contenido se haya renderizado completamente
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 500);
+    }
+  }, [selectedImages.length]);
 
   const handleImagePicker = () => {
     // Abrir directamente la galería para seleccionar imagen
@@ -198,11 +237,16 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
   console.log('🔍 Debug - studentsLoading:', studentsLoading);
   console.log('🔍 Debug - participantesSearch:', participantesSearch);
   
-  const filteredStudents = students.filter(student =>
-    student.nombre.toLowerCase().includes(participantesSearch.toLowerCase()) ||
-    student.apellido.toLowerCase().includes(participantesSearch.toLowerCase()) ||
-    student.dni.includes(participantesSearch)
-  );
+  const filteredStudents = students.filter(student => {
+    const searchTerm = participantesSearch?.toLowerCase() || '';
+    const nombre = student.nombre?.toLowerCase() || '';
+    const apellido = student.apellido?.toLowerCase() || '';
+    const dni = student.dni || '';
+    
+    return nombre.includes(searchTerm) ||
+           apellido.includes(searchTerm) ||
+           dni.includes(participantesSearch || '');
+  });
   
   console.log('🔍 Debug - filteredStudents:', filteredStudents);
 
@@ -512,14 +556,25 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
             // Usar apiClient para que el interceptor maneje el refresh del token
             // axios maneja automáticamente el Content-Type para FormData
             const response = await apiClient.post('/upload/s3/image', formDataArray[i], {
-              timeout: 30000,
+              timeout: 120000, // 2 minutos para imágenes (por si son grandes)
             });
 
             console.log('✅ [ACTIVIDAD] Imagen subida exitosamente:', response.data);
             uploadedMedia.push(response.data.imageKey);
-          } catch (error) {
+          } catch (error: any) {
             console.error('❌ [ACTIVIDAD] Error uploading image:', error);
-            throw new Error(`Error al subir imagen: ${error.message}`);
+            
+            // Detectar si es un error de timeout
+            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+              throw new Error('La imagen es demasiado grande o la conexión es lenta. Por favor, intenta con una imagen más pequeña o verifica tu conexión a internet.');
+            }
+            
+            // Detectar si es un error de red
+            if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error')) {
+              throw new Error('Error de conexión. Por favor, verifica tu conexión a internet e intenta nuevamente.');
+            }
+            
+            throw new Error(`Error al subir imagen: ${error.message || 'Error desconocido'}`);
           }
         }
       }
@@ -557,20 +612,47 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
         const formDataArray = prepareVideosForUpload(validVideos);
 
         for (let i = 0; i < formDataArray.length; i++) {
+          const startTime = Date.now();
           try {
+            const video = validVideos[i];
+            const videoSizeMB = video.fileSize ? (video.fileSize / (1024 * 1024)).toFixed(2) : 'desconocido';
+            const videoDuration = video.duration ? (video.duration / 1000).toFixed(1) : 'desconocido';
+            
             console.log(`📤 [ACTIVIDAD] Subiendo video ${i + 1}/${formDataArray.length}`);
+            console.log(`📊 [ACTIVIDAD] Video info: ${videoSizeMB}MB, ${videoDuration}s`);
+            console.log(`⏱️ [ACTIVIDAD] Timeout configurado: 300000ms (5 minutos)`);
 
             // Usar apiClient para que el interceptor maneje el refresh del token
             // axios maneja automáticamente el Content-Type para FormData
             const response = await apiClient.post('/upload/s3/video', formDataArray[i], {
-              timeout: 60000, // 60 segundos para videos
+              timeout: 300000, // 5 minutos (300 segundos) para videos grandes
             });
 
-            console.log('✅ [ACTIVIDAD] Video subido exitosamente:', response.data);
+            const uploadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`✅ [ACTIVIDAD] Video subido exitosamente en ${uploadTime}s:`, response.data);
             uploadedMedia.push(response.data.videoKey);
-          } catch (error) {
-            console.error('❌ [ACTIVIDAD] Error uploading video:', error);
-            throw new Error(`Error al subir video: ${error.message}`);
+          } catch (error: any) {
+            const uploadTime = Date.now() - startTime;
+            
+            // Detectar si es un error de timeout
+            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout') || error.message?.includes('TIMEOUT')) {
+              console.error('⏱️ [ACTIVIDAD] ERROR DE TIMEOUT detectado');
+              throw new Error(`El video es demasiado grande o la conexión es lenta (timeout después de ${(uploadTime / 1000).toFixed(1)}s). Por favor, intenta con un video más pequeño o verifica tu conexión a internet.`);
+            }
+            
+            // Detectar si es un error de red
+            if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error') || error.message?.includes('network')) {
+              console.error('🌐 [ACTIVIDAD] ERROR DE RED detectado');
+              throw new Error('Error de conexión. Por favor, verifica tu conexión a internet e intenta nuevamente.');
+            }
+            
+            // Detectar errores del servidor
+            if (error.response?.status) {
+              console.error(`🔴 [ACTIVIDAD] Error del servidor: ${error.response.status}`);
+              throw new Error(`Error del servidor (${error.response.status}): ${error.response.data?.message || error.message || 'Error desconocido'}`);
+            }
+            
+            throw new Error(`Error al subir video: ${error.message || 'Error desconocido'}`);
           }
         }
       }
@@ -691,62 +773,35 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
       />
       
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoidingView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 100}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        enabled={Platform.OS === 'ios'}
       >
         <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollContentContainer}
+          contentContainerStyle={[
+            styles.scrollContentContainer,
+            keyboardVisible && styles.scrollContentContainerKeyboardVisible
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+          bounces={false}
+          onContentSizeChange={() => {
+            // Asegurar scroll al final cuando el contenido cambia
+            if (selectedImages.length > 0) {
+              setTimeout(() => {
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+              }, 100);
+            }
+          }}
         >
-        {/* Título ACTIVIDAD y Botón de cámara unificados */}
-        <View style={styles.unifiedHeaderContainer}>
+        {/* Título ACTIVIDAD */}
+        <View style={styles.headerContainer}>
           <Text style={styles.actividadTitle}>ACTIVIDAD</Text>
-          
-          <TouchableOpacity style={styles.mediaButton} onPress={handleImagePicker}>
-            <View style={styles.mediaButtonCircle}>
-              <Image
-                source={require('../assets/design/icons/photo.png')}
-                style={[styles.mediaButtonImage, { tintColor: '#FFFFFF' }]}
-                resizeMode="contain"
-              />
-            </View>
-            <View style={styles.mediaPlusBadge}>
-              <Text style={styles.mediaPlusText}>+</Text>
-            </View>
-          </TouchableOpacity>
         </View>
-
-        {/* Media seleccionada (imágenes y videos) */}
-        {selectedImages.length > 0 && (
-          <View style={styles.selectedImagesContainer}>
-            <Text style={styles.selectedImagesTitle}>Media seleccionada:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {selectedImages.map((media, index) => (
-                <View key={index} style={styles.selectedImageContainer}>
-                  {media.type?.startsWith('video/') ? (
-                    <View style={styles.videoContainer}>
-                      <Image source={{ uri: media.uri }} style={styles.selectedImage} />
-                      <View style={styles.videoOverlay}>
-                        <Text style={styles.videoIcon}>▶️</Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <Image source={{ uri: media.uri }} style={styles.selectedImage} />
-                  )}
-                  <TouchableOpacity
-                    style={styles.removeImageButton}
-                    onPress={() => setSelectedImages(prev => prev.filter((_, i) => i !== index))}
-                  >
-                    <Text style={styles.removeImageText}>×</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
 
         {/* Formulario */}
         <View style={styles.formContainer}>
@@ -759,6 +814,25 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
               placeholderTextColor="#B3D4F1"
               value={formData.titulo}
               onChangeText={(text) => setFormData(prev => ({ ...prev, titulo: text }))}
+            />
+          </View>
+
+          {/* Descripción */}
+          <View 
+            ref={descripcionContainerRef}
+            style={styles.formFieldContainer}
+          >
+            <Text style={styles.formLabel}>Descripción de la tarea</Text>
+            <TextInput
+              ref={descripcionInputRef}
+              style={styles.formTextArea}
+              placeholder=""
+              placeholderTextColor="#B3D4F1"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={formData.descripcion}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, descripcion: text }))}
             />
           </View>
 
@@ -815,40 +889,69 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
                 </View>
               )}
             </View>
-            
-
           </View>
+        </View>
 
-          {/* Descripción */}
-          <View style={styles.formFieldContainer}>
-            <Text style={styles.formLabel}>Descripción de la tarea</Text>
-            <TextInput
-              style={styles.formTextArea}
-              placeholder=""
-              placeholderTextColor="#B3D4F1"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              value={formData.descripcion}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, descripcion: text }))}
-            />
-          </View>
+        {/* Sección de selección de imágenes/videos */}
+        <View style={styles.mediaSectionContainer}>
+          <Text style={styles.mediaSectionTitle}>Agregar imágenes o videos</Text>
+          
+          <TouchableOpacity style={styles.mediaButton} onPress={handleImagePicker}>
+            <View style={styles.mediaButtonCircle}>
+              <Image
+                source={require('../assets/design/icons/camera.png')}
+                style={styles.mediaButtonImage}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={styles.mediaPlusBadge}>
+              <Text style={styles.mediaPlusText}>+</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Media seleccionada (imágenes y videos) */}
+          {selectedImages.length > 0 && (
+            <View style={styles.selectedImagesContainer}>
+              <Text style={styles.selectedImagesTitle}>Media seleccionada:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {selectedImages.map((media, index) => (
+                  <View key={index} style={styles.selectedImageContainer}>
+                    {media.type?.startsWith('video/') ? (
+                      <View style={styles.videoContainer}>
+                        <Image source={{ uri: media.uri }} style={styles.selectedImage} />
+                        <View style={styles.videoOverlay}>
+                          <Text style={styles.videoIcon}>▶️</Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <Image source={{ uri: media.uri }} style={styles.selectedImage} />
+                    )}
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => setSelectedImages(prev => prev.filter((_, i) => i !== index))}
+                    >
+                      <Text style={styles.removeImageText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+        {/* Botón de enviar - Al final del contenido */}
+        <View style={styles.submitButtonContainer}>
+          <TouchableOpacity
+            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+            onPress={submitActivity}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.submitButtonText}>
+              {isSubmitting ? 'Enviando...' : 'Enviar Actividad'}
+            </Text>
+          </TouchableOpacity>
         </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      
-      {/* Botón flotante de enviar */}
-      <View style={styles.floatingButtonContainer}>
-        <TouchableOpacity
-          style={[styles.floatingButton, isSubmitting && styles.submitButtonDisabled]}
-          onPress={submitActivity}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.submitButtonText}>
-            {isSubmitting ? 'Enviando...' : 'Enviar Actividad'}
-          </Text>
-        </TouchableOpacity>
-      </View>
       
       {/* Custom Alert */}
       {alertConfig && (
@@ -894,23 +997,44 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContentContainer: {
-    paddingBottom: 200, // Espacio extra al final para que el botón flotante no tape el contenido (botón a 110px + altura del botón ~70px + margen)
+    paddingBottom: 200, // Espacio generoso para el botón al final y evitar que se corte
+    // Removido flexGrow: 1 para permitir que el contenido se expanda naturalmente
   },
-  unifiedHeaderContainer: {
+  scrollContentContainerKeyboardVisible: {
+    paddingBottom: 200, // Mantener espacio suficiente incluso con el teclado visible
+  },
+  headerContainer: {
     alignItems: 'center',
-    paddingVertical: 25,
+    paddingVertical: 15,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 10,
+    borderRadius: 15,
+  },
+  mediaSectionContainer: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 20,
     marginTop: 10,
     marginBottom: 20,
+    paddingVertical: 25,
+    paddingHorizontal: 20,
     borderRadius: 15,
+    alignItems: 'center',
+  },
+  mediaSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0E5FCE',
+    marginBottom: 20,
+    textAlign: 'center',
   },
   actividadTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#0E5FCE',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 0,
   },
   mediaButton: {
     position: 'relative',
@@ -924,8 +1048,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mediaButtonImage: {
-    width: 40,
-    height: 40,
+    width: 45,
+    height: 45,
+    tintColor: '#FFFFFF',
   },
   mediaPlusBadge: {
     position: 'absolute',
@@ -946,13 +1071,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   selectedImagesContainer: {
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 10,
+    marginBottom: 30, // Aumentado para dar más espacio antes del botón
     paddingHorizontal: 20,
     backgroundColor: '#FFFFFF',
     marginHorizontal: 20,
     borderRadius: 15,
     paddingVertical: 15,
+    maxHeight: 150,
   },
   selectedImagesTitle: {
     fontSize: 18,
@@ -972,7 +1098,7 @@ const styles = StyleSheet.create({
   selectedImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
+    borderRadius: 0,
   },
   removeImageButton: {
     position: 'absolute',
@@ -985,6 +1111,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
+    zIndex: 1000,
     borderColor: '#FFFFFF',
   },
   removeImageText: {
@@ -998,7 +1125,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     marginHorizontal: 20,
     borderRadius: 15,
-    paddingVertical: 20,
+    paddingTop: 15,
+    paddingBottom: 20,
   },
   formFieldContainer: {
     marginBottom: 25,
@@ -1038,33 +1166,24 @@ const styles = StyleSheet.create({
     minHeight: 120,
     color: '#0E5FCE',
   },
-  floatingButtonContainer: {
-    position: 'absolute',
-    bottom: 110, // Por encima del bottom tab (100px de altura + 10px de margen)
-    left: 0,
-    right: 0,
+  submitButtonContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 0,
-    paddingTop: 0,
+    paddingTop: 10,
+    paddingBottom: 40,
     backgroundColor: 'transparent',
     alignItems: 'center',
-    // Sombra para efecto flotante
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8, // Para Android
+    marginTop: 20, // Espacio antes del botón
+    marginBottom: 20, // Espacio después del botón
+    width: '100%', // Asegurar que ocupe todo el ancho
   },
-  floatingButton: {
+  submitButton: {
     backgroundColor: '#FF8C42',
     paddingVertical: 18,
     paddingHorizontal: 40,
     borderRadius: 15,
     alignItems: 'center',
-    // Sombra adicional para el botón
+    width: '100%',
+    // Sombra para el botón
     shadowColor: '#FF8C42',
     shadowOffset: {
       width: 0,

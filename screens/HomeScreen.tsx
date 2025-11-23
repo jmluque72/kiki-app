@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Alert } from 'react-native';
 import {
   View,
   Text,
@@ -30,6 +31,9 @@ import AcercaDeScreen from './AcercaDeScreen';
 import TerminosCondicionesScreen from './TerminosCondicionesScreen';
 import StudentActionsScreen from '../src/screens/StudentActionsScreen';
 import FamilyActionsCalendarScreen from '../src/screens/FamilyActionsCalendarScreen';
+import FormulariosScreen from './FormulariosScreen';
+import CompleteFormScreen from './CompleteFormScreen';
+import FormRequestService, { FormRequest } from '../src/services/formRequestService';
 // import PushNotificationService from '../src/services/pushNotificationService';
 
 const Tab = createBottomTabNavigator();
@@ -40,7 +44,7 @@ interface HomeScreenProps {
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
   const { user, activeAssociation } = useAuth();
-  const { selectedInstitution, userAssociations, getActiveInstitution } = useInstitution();
+  const { selectedInstitution, userAssociations, getActiveInstitution, getActiveStudent } = useInstitution();
   const { showMenu, openMenu, closeMenu } = useSideMenu();
   const [notificationCenterVisible, setNotificationCenterVisible] = useState(false);
   const [showInstitutionSelector, setShowInstitutionSelector] = useState(false);
@@ -50,11 +54,70 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
   const [showAcercaDe, setShowAcercaDe] = useState(false);
   const [showTerminosCondiciones, setShowTerminosCondiciones] = useState(false);
   const [showAcciones, setShowAcciones] = useState(false);
+  const [showFormularios, setShowFormularios] = useState(false);
+  const [showCompleteForm, setShowCompleteForm] = useState(false);
+  const [selectedFormRequest, setSelectedFormRequest] = useState<FormRequest | null>(null);
+  const [pendingFormsCount, setPendingFormsCount] = useState(0);
+  const [hasRequiredPending, setHasRequiredPending] = useState(false);
+  const [showRequiredFormsModal, setShowRequiredFormsModal] = useState(false);
+  
+  // Función para abrir formularios
+  const handleOpenFormularios = () => {
+    closeMenu();
+    setShowFormularios(true);
+  };
+  
+  // Debug: Ver cuando cambia showFormularios
+  useEffect(() => {
+    console.log('📋 [HomeScreen] 🔄 showFormularios cambió a:', showFormularios);
+    console.log('📋 [HomeScreen] 🔄 Modal debería estar visible:', showFormularios);
+  }, [showFormularios]);
   
   // Re-renderizar cuando cambie la asociación activa
   useEffect(() => {
     console.log('🔄 [HomeScreen] Asociación activa cambió:', activeAssociation);
   }, [activeAssociation]);
+
+  // Cargar cantidad de formularios pendientes y verificar requeridos
+  useEffect(() => {
+    const loadPendingForms = async () => {
+      const activeStudent = getActiveStudent();
+      console.log('📋 [HomeScreen] Cargando formularios pendientes:', {
+        userId: user?._id,
+        studentId: activeStudent?._id,
+        role: activeAssociation?.role?.nombre
+      });
+      
+      if (user?._id && activeStudent?._id && activeAssociation?.role?.nombre === 'familyadmin') {
+        try {
+          const forms = await FormRequestService.getPendingForms(user._id, activeStudent._id);
+          console.log('📋 [HomeScreen] Formularios pendientes encontrados:', forms.length);
+          setPendingFormsCount(forms.length);
+          
+          // Verificar si hay formularios requeridos pendientes
+          const hasRequired = await FormRequestService.checkRequiredFormsPending(user._id, activeStudent._id);
+          console.log('📋 [HomeScreen] Hay formularios requeridos pendientes:', hasRequired);
+          setHasRequiredPending(hasRequired);
+          
+          // Mostrar modal bloqueante si hay formularios requeridos pendientes
+          if (hasRequired && forms.length > 0) {
+            setShowRequiredFormsModal(true);
+          }
+        } catch (error) {
+          console.error('❌ [HomeScreen] Error cargando formularios pendientes:', error);
+        }
+      } else {
+        // Si no se cumplen las condiciones, resetear el contador
+        setPendingFormsCount(0);
+        setHasRequiredPending(false);
+      }
+    };
+
+    loadPendingForms();
+    // Refrescar cada 30 segundos
+    const interval = setInterval(loadPendingForms, 30000);
+    return () => clearInterval(interval);
+  }, [user?._id, activeAssociation?.role?.nombre, selectedInstitution, activeAssociation?.student?._id]);
 
   // Inicializar notificaciones push cuando el usuario llega al Home
   // useEffect(() => {
@@ -379,6 +442,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
                 closeMenu();
                 setShowAcciones(true);
               }}
+              openFormularios={() => {
+                closeMenu();
+                setShowFormularios(true);
+              }}
+              pendingFormsCount={pendingFormsCount}
             />
           </View>
         </View>
@@ -457,6 +525,104 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
           }
         })()}
       </Modal>
+
+      {/* Modal de Formularios Pendientes */}
+      <Modal
+        visible={showFormularios}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowFormularios(false);
+        }}
+      >
+        {showFormularios && (
+          <FormulariosScreen
+            onBack={() => {
+              console.log('📋 [HomeScreen] Volviendo desde FormulariosScreen');
+              setShowFormularios(false);
+            }}
+            onCompleteForm={(formRequest) => {
+              console.log('📋 [HomeScreen] Formulario seleccionado para completar:', formRequest.formRequest.nombre);
+              setSelectedFormRequest(formRequest);
+              setShowFormularios(false);
+              setShowCompleteForm(true);
+            }}
+          />
+        )}
+      </Modal>
+
+      {/* Modal de Completar Formulario */}
+      <Modal
+        visible={showCompleteForm}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowCompleteForm(false);
+          setSelectedFormRequest(null);
+        }}
+      >
+        {selectedFormRequest && (
+          <CompleteFormScreen
+            formRequest={selectedFormRequest}
+            onBack={() => {
+              setShowCompleteForm(false);
+              setSelectedFormRequest(null);
+              setShowFormularios(true);
+            }}
+            onComplete={() => {
+              setShowCompleteForm(false);
+              setSelectedFormRequest(null);
+              // Recargar cantidad de formularios pendientes
+              const activeStudent = getActiveStudent();
+              if (user?._id && activeStudent?._id) {
+                FormRequestService.getPendingForms(user._id, activeStudent._id)
+                  .then(forms => {
+                    setPendingFormsCount(forms.length);
+                    // Verificar si aún hay formularios requeridos pendientes
+                    return FormRequestService.checkRequiredFormsPending(user._id, activeStudent._id);
+                  })
+                  .then(hasRequired => {
+                    setHasRequiredPending(hasRequired);
+                    if (!hasRequired) {
+                      setShowRequiredFormsModal(false);
+                    }
+                  })
+                  .catch(error => console.error('Error recargando formularios:', error));
+              }
+            }}
+          />
+        )}
+      </Modal>
+
+      {/* Modal bloqueante para formularios requeridos pendientes */}
+      <Modal
+        visible={showRequiredFormsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.blockingModalOverlay}>
+          <View style={styles.blockingModalContent}>
+            <Text style={styles.blockingModalTitle}>
+              Formularios Requeridos Pendientes
+            </Text>
+            <Text style={styles.blockingModalText}>
+              Tienes formularios requeridos que deben ser completados antes de continuar.
+            </Text>
+            <TouchableOpacity
+              style={styles.blockingModalButton}
+              onPress={() => {
+                setShowRequiredFormsModal(false);
+                setShowFormularios(true);
+              }}
+            >
+              <Text style={styles.blockingModalButtonText}>
+                Ver Formularios Pendientes
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };
@@ -510,6 +676,48 @@ const styles = StyleSheet.create({
     width: '80%',
     height: '100%',
     backgroundColor: '#FFFFFF',
+  },
+  blockingModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  blockingModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  blockingModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  blockingModalText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  blockingModalButton: {
+    backgroundColor: '#0E5FCE',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    width: '100%',
+  },
+  blockingModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

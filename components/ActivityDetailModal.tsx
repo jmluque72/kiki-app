@@ -8,8 +8,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  FlatList
+  FlatList,
+  Platform,
+  ActivityIndicator
 } from 'react-native';
+import { Video } from 'react-native-video';
 import { fonts } from '../src/config/fonts';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 import { ActivityService } from '../src/services/activityService';
@@ -66,6 +69,7 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [loadingFavorite, setLoadingFavorite] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
+  const [videoLoading, setVideoLoading] = useState<{ [key: number]: boolean }>({});
 
   // Si no está visible o no hay actividad, no renderizar nada
   if (!visible || !activity) return null;
@@ -307,12 +311,16 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                 )}
               </View>
             ) : isFamilyUser && (!activity.imagenes || activity.imagenes.length === 0) ? (
-              // Placeholder para usuarios familiares cuando no hay imágenes
+              // Placeholder para usuarios familiares cuando no hay imágenes - mostrar logo de Kiki
               <View style={styles.placeholderContainer}>
-                <Text style={styles.placeholderText}>Sin imágenes</Text>
+                <Image
+                  source={require('../assets/design/icons/kiki_logo_header.png')}
+                  style={styles.placeholderLogo}
+                  resizeMode="contain"
+                />
               </View>
             ) : (
-              /* Carrusel de imágenes para coordinadores */
+              /* Carrusel de imágenes y videos para coordinadores */
               activity.imagenes && activity.imagenes.length > 0 ? (
                 <View style={styles.imageContainer}>
                   <FlatList
@@ -325,15 +333,64 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                       const index = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
                       setCurrentImageIndex(index);
                     }}
-                    renderItem={({ item }) => (
-                      <View style={styles.carouselImageContainer}>
-                        <Image
-                          source={{ uri: item }}
-                          style={styles.carouselImage}
-                          resizeMode="cover"
-                        />
-                      </View>
-                    )}
+                    renderItem={({ item, index }) => {
+                      const mediaType = getMediaType(item);
+                      // Solo reproducir el video si está en el índice actual
+                      const isCurrentVideo = index === currentImageIndex && mediaType === 'video';
+                      return (
+                        <View style={styles.carouselImageContainer}>
+                          {mediaType === 'video' ? (
+                            <View style={styles.videoWrapper}>
+                              {videoLoading[index] && (
+                                <View style={styles.videoLoadingContainer}>
+                                  <ActivityIndicator size="large" color="#FFFFFF" />
+                                  <Text style={styles.videoLoadingText}>Cargando video...</Text>
+                                </View>
+                              )}
+                              <Video
+                                source={{ 
+                                  uri: item,
+                                  headers: Platform.OS === 'android' ? {
+                                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36',
+                                    'Accept': '*/*',
+                                    'Accept-Encoding': 'identity',
+                                  } : undefined
+                                }}
+                                style={styles.video}
+                                resizeMode="contain"
+                                controls={true}
+                                paused={!isCurrentVideo}
+                                repeat={false}
+                                playInBackground={false}
+                                playWhenInactive={false}
+                                ignoreSilentSwitch="ignore"
+                                useTextureView={Platform.OS === 'android'}
+                                allowsExternalPlayback={false}
+                                progressUpdateInterval={1000}
+                                onError={(error) => {
+                                  console.error('❌ [ActivityDetailModal] Error reproduciendo video:', error);
+                                  setVideoLoading({ ...videoLoading, [index]: false });
+                                }}
+                                onLoadStart={() => {
+                                  console.log('📹 [ActivityDetailModal] Iniciando carga del video:', item);
+                                  setVideoLoading({ ...videoLoading, [index]: true });
+                                }}
+                                onLoad={() => {
+                                  console.log('✅ [ActivityDetailModal] Video cargado exitosamente');
+                                  setVideoLoading({ ...videoLoading, [index]: false });
+                                }}
+                              />
+                            </View>
+                          ) : (
+                            <Image
+                              source={{ uri: item }}
+                              style={styles.carouselImage}
+                              resizeMode="cover"
+                            />
+                          )}
+                        </View>
+                      );
+                    }}
                     keyExtractor={(item, index) => index.toString()}
                   />
                   {/* Indicadores de página */}
@@ -353,7 +410,11 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                 </View>
               ) : (
                 <View style={styles.noImageContainer}>
-                  <Text style={styles.noImageText}>Sin imagen</Text>
+                  <Image
+                    source={require('../assets/design/icons/kiki_logo_header.png')}
+                    style={styles.placeholderLogo}
+                    resizeMode="contain"
+                  />
                 </View>
               )
             )}
@@ -466,7 +527,7 @@ const styles = StyleSheet.create({
   noImageContainer: {
     alignItems: 'center',
     padding: 30,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
     margin: 10,
     marginBottom: 15,
     borderRadius: 15,
@@ -482,7 +543,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 250,
     borderRadius: 10,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
@@ -493,6 +554,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     fontFamily: fonts.regular,
+  },
+  placeholderLogo: {
+    width: 120,
+    height: 120,
   },
   infoSection: {
     padding: 20,
@@ -667,6 +732,34 @@ const styles = StyleSheet.create({
   videoIcon: {
     fontSize: 48,
     color: '#FFFFFF',
+  },
+  videoWrapper: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000000',
+    borderRadius: 15,
+    overflow: 'hidden',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+  },
+  videoLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  videoLoadingText: {
+    color: '#FFFFFF',
+    marginTop: 10,
+    fontSize: 14,
+    fontFamily: fonts.medium,
   },
 });
 

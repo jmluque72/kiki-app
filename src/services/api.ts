@@ -1,6 +1,6 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_FULL_URL, API_TIMEOUT, DEFAULT_HEADERS } from '../config/apiConfig';
+import AsyncStorage from '../utils/storage';
+import { API_FULL_URL, API_TIMEOUT, API_UPLOAD_TIMEOUT, DEFAULT_HEADERS } from '../config/apiConfig';
 import RefreshTokenService from './refreshTokenService';
 
 // Crear instancia de axios con configuración base
@@ -25,6 +25,35 @@ apiClient.interceptors.request.use(
     if (currentToken) {
       config.headers.Authorization = `Bearer ${currentToken}`;
     }
+    
+    // Si el data es FormData, NO establecer Content-Type (axios lo hará automáticamente con el boundary)
+    // Esto es crítico para uploads de archivos
+    // En React Native, FormData puede no ser una instancia estándar, así que verificamos de múltiples formas
+    const isFormData = config.data instanceof FormData || 
+                       (config.data && typeof config.data === 'object' && 
+                        (config.data.constructor?.name === 'FormData' || 
+                         config.data._parts || 
+                         config.data.append));
+    
+    if (isFormData) {
+      // Eliminar Content-Type para que axios lo establezca automáticamente con el boundary correcto
+      delete config.headers['Content-Type'];
+      delete config.headers['content-type'];
+      
+      // Si es un endpoint de upload y no se especificó timeout, usar el timeout extendido
+      const isUploadEndpoint = config.url?.includes('/upload/');
+      if (isUploadEndpoint) {
+        if (!config.timeout || config.timeout === API_TIMEOUT) {
+          config.timeout = API_UPLOAD_TIMEOUT;
+          console.log(`📤 [API] FormData detectado en endpoint de upload, timeout extendido a ${API_UPLOAD_TIMEOUT}ms (${API_UPLOAD_TIMEOUT / 1000}s)`);
+        } else {
+          console.log(`📤 [API] FormData detectado en endpoint de upload, timeout personalizado: ${config.timeout}ms (${config.timeout / 1000}s)`);
+        }
+      } else {
+        console.log('📤 [API] FormData detectado, Content-Type será establecido automáticamente por axios');
+      }
+    }
+    
     return config;
   },
   (error) => {

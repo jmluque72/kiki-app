@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../utils/storage';
 import { processImage, ImageProcessingPresets } from './imageProcessor';
 
 export interface UpdateAvatarResponse {

@@ -398,12 +398,14 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
           {hasMedia ? (() => {
             const firstMedia = getFirstMedia(activity.activity?.imagenes || []);
             if (!firstMedia) {
-              // Placeholder si no hay media válida
+              // Placeholder si no hay media válida - mostrar logo de Kiki
               return (
                 <View style={styles.placeholderContainer}>
-                  <View style={styles.placeholderIcon}>
-                    <Text style={styles.placeholderIconText}>📷</Text>
-                  </View>
+                  <Image
+                    source={require('../assets/design/icons/kiki_logo_header.png')}
+                    style={styles.placeholderLogo}
+                    resizeMode="contain"
+                  />
                 </View>
               );
             }
@@ -444,11 +446,13 @@ const AlbumScreen: React.FC<{ onOpenNotifications: () => void; onOpenMenu?: () =
               </>
             );
           })() : (
-            // Placeholder cuando no hay imágenes ni videos
+            // Placeholder cuando no hay imágenes ni videos - mostrar logo de Kiki
             <View style={styles.placeholderContainer}>
-              <View style={styles.placeholderIcon}>
-                <Text style={styles.placeholderIconText}>📷</Text>
-              </View>
+              <Image
+                source={require('../assets/design/icons/kiki_logo_header.png')}
+                style={styles.placeholderLogo}
+                resizeMode="contain"
+              />
             </View>
           )}
         </TouchableOpacity>
@@ -700,7 +704,7 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
     borderRadius: 12,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -717,6 +721,10 @@ const styles = StyleSheet.create({
   },
   placeholderIconText: {
     fontSize: 32,
+  },
+  placeholderLogo: {
+    width: 80,
+    height: 80,
   },
   sectionHeader: {
     backgroundColor: '#F8F9FA',

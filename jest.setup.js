@@ -75,13 +75,6 @@ jest.mock('aws-amplify', () => ({
   },
 }));
 
-// Mock de React Native Reanimated
-jest.mock('react-native-reanimated', () => {
-  const Reanimated = require('react-native-reanimated/mock');
-  Reanimated.default.call = () => {};
-  return Reanimated;
-});
-
 // Mock de React Native Screens
 jest.mock('react-native-screens', () => ({
   enableScreens: jest.fn(),

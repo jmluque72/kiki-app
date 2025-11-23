@@ -1,5 +1,5 @@
 import { Platform, DeviceEventEmitter } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../utils/storage';
 
 // Importación segura de PushNotification para evitar errores de NativeEventEmitter
 let PushNotification: any = null;

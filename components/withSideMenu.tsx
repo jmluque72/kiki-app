@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Modal, StyleSheet } from 'react-native';
+import { View, Modal, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useSideMenu } from '../src/hooks/useSideMenu';
 import { useAuth } from '../contexts/AuthContextHybrid';
+import { useInstitution } from '../contexts/InstitutionContext';
 import SideMenu from './SideMenu';
 import AssociationsScreen from '../screens/AssociationsScreen';
 import QuienRetiraScreen from '../screens/QuienRetiraScreen';
@@ -11,6 +12,9 @@ import AcercaDeScreen from '../screens/AcercaDeScreen';
 import TerminosCondicionesScreen from '../screens/TerminosCondicionesScreen';
 import StudentActionsScreen from '../src/screens/StudentActionsScreen';
 import FamilyActionsCalendarScreen from '../src/screens/FamilyActionsCalendarScreen';
+import FormulariosScreen from '../screens/FormulariosScreen';
+import CompleteFormScreen from '../screens/CompleteFormScreen';
+import FormRequestService, { FormRequest } from '../src/services/formRequestService';
 
 /**
  * Higher-Order Component que agrega funcionalidad de menú hamburguesa
@@ -22,6 +26,7 @@ const withSideMenu = <P extends object>(
   const WithSideMenuComponent = (props: P) => {
     const { showMenu, openMenu, closeMenu } = useSideMenu();
     const { user, activeAssociation } = useAuth();
+    const { getActiveStudent } = useInstitution();
     const [showAssociations, setShowAssociations] = useState(false);
     const [showQuienRetira, setShowQuienRetira] = useState(false);
     const [showRetirar, setShowRetirar] = useState(false);
@@ -29,6 +34,10 @@ const withSideMenu = <P extends object>(
     const [showAcercaDe, setShowAcercaDe] = useState(false);
     const [showTerminosCondiciones, setShowTerminosCondiciones] = useState(false);
     const [showAcciones, setShowAcciones] = useState(false);
+    const [showFormularios, setShowFormularios] = useState(false);
+    const [showCompleteForm, setShowCompleteForm] = useState(false);
+    const [selectedFormRequest, setSelectedFormRequest] = useState<FormRequest | null>(null);
+    const [pendingFormsCount, setPendingFormsCount] = useState(0);
     
     // Determinar qué pantalla de acciones mostrar según el rol
     const getUserRole = () => {
@@ -106,6 +115,11 @@ const withSideMenu = <P extends object>(
                          closeMenu();
                          setShowAcciones(true);
                        }}
+                       openFormularios={() => {
+                         closeMenu();
+                         setShowFormularios(true);
+                       }}
+                       pendingFormsCount={pendingFormsCount}
             />
             </View>
           </View>
@@ -180,6 +194,64 @@ const withSideMenu = <P extends object>(
         >
           {getAccionesScreen()}
         </Modal>
+
+        {/* Modal de Formularios */}
+        <Modal
+          visible={showFormularios}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => setShowFormularios(false)}
+        >
+          {showFormularios && (
+            <FormulariosScreen
+              onBack={() => {
+                setShowFormularios(false);
+              }}
+              onCompleteForm={(formRequest) => {
+                setSelectedFormRequest(formRequest);
+                setShowFormularios(false);
+                setShowCompleteForm(true);
+              }}
+            />
+          )}
+        </Modal>
+
+        {/* Modal de Completar Formulario */}
+        <Modal
+          visible={showCompleteForm}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowCompleteForm(false);
+            setSelectedFormRequest(null);
+            setShowFormularios(true);
+          }}
+        >
+          {showCompleteForm && selectedFormRequest && (
+            <CompleteFormScreen
+              formRequest={selectedFormRequest}
+              onBack={() => {
+                setShowCompleteForm(false);
+                setSelectedFormRequest(null);
+                setShowFormularios(true);
+              }}
+              onComplete={() => {
+                setShowCompleteForm(false);
+                setSelectedFormRequest(null);
+                // Recargar cantidad de formularios pendientes
+                const activeStudent = getActiveStudent();
+                if (user?._id && activeStudent?._id) {
+                  FormRequestService.getPendingForms(user._id, activeStudent._id)
+                    .then(forms => {
+                      setPendingFormsCount(forms.length);
+                    })
+                    .catch(error => console.error('Error recargando formularios:', error));
+                }
+              }}
+            />
+          )}
+        </Modal>
+
       </>
     );
   };

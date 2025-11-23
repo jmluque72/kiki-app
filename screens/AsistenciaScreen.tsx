@@ -430,12 +430,11 @@ const AsistenciaScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp }: {
               </TouchableOpacity>
               <Text style={styles.totalText}>
                 <Text>Total: </Text>
-                <Text style={styles.numberText}>{totalStudents}</Text>
+                <Text style={styles.numberText}>{totalStudents ?? 0}</Text>
                 <Text> Presentes: </Text>
-                <Text style={styles.presentesText}>{presentStudents}</Text>
+                <Text style={styles.presentesText}>{presentStudents ?? 0}</Text>
               </Text>
             </View>
-          )}
 
         {/* Grid de personas para asistencias */}
         <View style={styles.personasGrid}>
@@ -496,18 +495,18 @@ const AsistenciaScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp }: {
                     <Text style={[
                       styles.personaNombre,
                       isWithdrawn && styles.blockedText
-                    ]}>{student.nombre}</Text>
+                    ]}>{student.nombre || ''}</Text>
                     <Text style={[
                       styles.personaApellido,
                       isWithdrawn && styles.blockedText
-                    ]}>{student.apellido}</Text>
+                    ]}>{student.apellido || ''}</Text>
                     <Text style={[
                       styles.personaDivision,
                       isWithdrawn && styles.blockedText
-                    ]}>{student.division?.nombre}</Text>
+                    ]}>{student.division?.nombre || ''}</Text>
                     {isWithdrawn && (
                       <Text style={styles.withdrawnStatusText}>
-                        Retirado por: {withdrawals[student._id].withdrawnByName}
+                        Retirado por: {withdrawals[student._id]?.withdrawnByName || ''}
                       </Text>
                     )}
                   </TouchableOpacity>
