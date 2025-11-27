@@ -38,7 +38,8 @@ const EventAuthorizationModal: React.FC<EventAuthorizationModalProps> = ({
       console.log('📋 [AUTHORIZATION MODAL] Cargando autorizaciones para evento:', eventId);
       const data = await EventAuthorizationService.getEventAuthorizations(eventId);
       setAuthorizations(data);
-      console.log('📋 [AUTHORIZATION MODAL] Autorizaciones cargadas:', data.summary);
+      console.log('📋 [AUTHORIZATION MODAL] Autorizaciones cargadas:', data);
+      console.log('📋 [AUTHORIZATION MODAL] Summary:', data?.summary);
     } catch (err: any) {
       console.error('❌ [AUTHORIZATION MODAL] Error:', err);
       setError(err.response?.data?.message || 'Error al cargar autorizaciones');
@@ -207,30 +208,32 @@ const EventAuthorizationModal: React.FC<EventAuthorizationModalProps> = ({
         ) : authorizations ? (
           <ScrollView style={styles.content}>
             {/* Resumen */}
-            <View style={styles.summaryContainer}>
-              <Text style={styles.summaryTitle}>Resumen</Text>
-              <View style={styles.summaryStats}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{authorizations.summary.autorizados}</Text>
-                  <Text style={styles.statLabel}>Autorizados</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{authorizations.summary.pendientes}</Text>
-                  <Text style={styles.statLabel}>Pendientes</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{authorizations.summary.rechazados}</Text>
-                  <Text style={styles.statLabel}>Rechazados</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{authorizations.summary.total}</Text>
-                  <Text style={styles.statLabel}>Total</Text>
+            {authorizations.summary && (
+              <View style={styles.summaryContainer}>
+                <Text style={styles.summaryTitle}>Resumen</Text>
+                <View style={styles.summaryStats}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{authorizations.summary.autorizados ?? 0}</Text>
+                    <Text style={styles.statLabel}>Autorizados</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{authorizations.summary.pendientes ?? 0}</Text>
+                    <Text style={styles.statLabel}>Pendientes</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{authorizations.summary.rechazados ?? 0}</Text>
+                    <Text style={styles.statLabel}>Rechazados</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{authorizations.summary.total ?? 0}</Text>
+                    <Text style={styles.statLabel}>Total</Text>
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
 
             {/* Lista completa de estudiantes de la división */}
-            {authorizations.allStudentsPending && authorizations.allStudentsPending.length > 0 && (
+            {authorizations.allStudentsPending && Array.isArray(authorizations.allStudentsPending) && authorizations.allStudentsPending.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Estudiantes de la División</Text>
                 {authorizations.allStudentsPending.map(student => 
@@ -240,7 +243,7 @@ const EventAuthorizationModal: React.FC<EventAuthorizationModalProps> = ({
             )}
 
             {/* Sección de respuestas detalladas (opcional, para referencia) */}
-            {authorizations.authorizations.length > 0 && (
+            {authorizations.authorizations && Array.isArray(authorizations.authorizations) && authorizations.authorizations.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Detalles de Autorizaciones</Text>
                 {authorizations.authorizations.map(auth => 

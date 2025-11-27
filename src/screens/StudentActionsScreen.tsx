@@ -140,7 +140,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
       setActionsError(null);
       
       console.log('🔄 [ACTIONS] Cargando acciones para división:', activeAssociation.division._id);
-      const response = await apiClient.get(`/api/student-actions/division/${activeAssociation.division._id}`);
+      const response = await apiClient.get(`/student-actions/division/${activeAssociation.division._id}`);
       
       console.log('✅ [ACTIONS] Respuesta recibida:', JSON.stringify(response.data, null, 2));
       const acciones = response.data.data || [];
@@ -180,7 +180,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
     try {
       if (!selectedStudent) return;
       
-      const response = await apiClient.get(`/api/student-actions/log/student/${selectedStudent._id}?fecha=${selectedDateString}`);
+      const response = await apiClient.get(`/student-actions/log/student/${selectedStudent._id}?fecha=${selectedDateString}`);
       setActionLogs(response.data.data || []);
     } catch (error) {
       console.error('Error cargando acciones del estudiante:', error);
@@ -222,7 +222,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
       }
       
       const response = await apiClient.get(
-        `/api/student-actions/log/division/${activeAssociation.division._id}?fechaInicio=${startDateStr}&fechaFin=${endDateStr}`
+        `/student-actions/log/division/${activeAssociation.division._id}?fechaInicio=${startDateStr}&fechaFin=${endDateStr}`
       );
       const actions = response.data.data || [];
       
@@ -369,7 +369,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
       
       const fechaAccion = new Date(`${selectedDateString}T${selectedTime}:00`);
       
-      const response = await apiClient.post('/api/student-actions/log', {
+      const response = await apiClient.post('/student-actions/log', {
         estudiante: selectedStudent._id,
         accion: selectedAction._id,
         comentarios: comments,

@@ -276,11 +276,14 @@ export class NotificationService {
   }
 
   // Obtener conteo de notificaciones sin leer
-  static async getUnreadCount(): Promise<number> {
+  static async getUnreadCount(accountId?: string, divisionId?: string): Promise<number> {
     try {
-      const response = await apiClient.get<{ success: boolean; data: { count: number } }>(
-        '/notifications/unread-count'
-      );
+      const queryParams = new URLSearchParams();
+      if (accountId) queryParams.append('accountId', accountId);
+      if (divisionId) queryParams.append('divisionId', divisionId);
+
+      const url = `/notifications/unread-count${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await apiClient.get<{ success: boolean; data: { count: number } }>(url);
       
       if (response.data.success && response.data.data) {
         return response.data.data.count;
@@ -294,14 +297,14 @@ export class NotificationService {
   }
 
   // Obtener conteo de notificaciones sin leer para usuarios familia
-  static async getFamilyUnreadCount(accountId: string): Promise<number> {
+  static async getFamilyUnreadCount(accountId?: string, divisionId?: string): Promise<number> {
     try {
       const queryParams = new URLSearchParams();
-      queryParams.append('accountId', accountId);
+      if (accountId) queryParams.append('accountId', accountId);
+      if (divisionId) queryParams.append('divisionId', divisionId);
 
-      const response = await apiClient.get<{ success: boolean; data: { count: number } }>(
-        `/notifications/family/unread-count?${queryParams.toString()}`
-      );
+      const url = `/notifications/family/unread-count${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await apiClient.get<{ success: boolean; data: { count: number } }>(url);
       
       if (response.data.success && response.data.data) {
         return response.data.data.count;

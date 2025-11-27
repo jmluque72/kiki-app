@@ -40,9 +40,14 @@ const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
     return days;
   };
 
-  // Formatear fecha para comparación
+  // Formatear fecha para comparación (usar fecha local, no UTC)
   const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+    // Extraer año, mes y día directamente de la fecha local
+    // para evitar problemas de zona horaria
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Navegar a la semana anterior

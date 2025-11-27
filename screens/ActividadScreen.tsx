@@ -25,6 +25,7 @@ import CustomAlert from '../components/CustomAlert';
 import { processActivityImages, prepareImagesForUpload } from '../src/services/activityImageService';
 import { simpleProcessMultipleImages } from '../src/services/simpleImageProcessor';
 import { prepareVideosForUpload, filterValidVideos } from '../src/services/activityVideoService';
+import ImageResizer from 'react-native-image-resizer';
 import { useVideoConversion } from '../src/hooks/useVideoConversion';
 import VideoConversionModal from '../src/components/VideoConversionModal';
 
@@ -53,6 +54,50 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
   const [selectedImages, setSelectedImages] = useState([]);
   const [showVideoConversion, setShowVideoConversion] = useState(false);
   const [videoConversionResult, setVideoConversionResult] = useState(null);
+  
+  // Función para copiar archivo temporal a lugar permanente en Android
+  const copyImageToPermanentLocation = async (imageUri: string): Promise<string> => {
+    if (Platform.OS !== 'android') {
+      return imageUri; // En iOS, retornar URI original
+    }
+
+    try {
+      console.log('📱 [ACTIVIDAD] Copiando archivo temporal a lugar permanente:', imageUri);
+      
+      // Si ya es un archivo permanente (no temporal), retornar tal cual
+      if (!imageUri.includes('rn_image_picker_lib_temp')) {
+        console.log('✅ [ACTIVIDAD] Archivo ya es permanente, no necesita copia');
+        return imageUri;
+      }
+
+      // Usar ImageResizer para copiar el archivo (sin redimensionar, solo copiar)
+      // Esto crea una copia permanente en el cache de la app
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(7);
+      const outputPath = `permanent_${timestamp}_${random}.jpg`;
+      
+      console.log('📁 [ACTIVIDAD] Creando copia permanente con outputPath:', outputPath);
+      
+      const result = await ImageResizer.createResizedImage(
+        imageUri,
+        10000, // Dimensiones muy grandes para no redimensionar (solo copiar)
+        10000,
+        'JPEG',
+        100, // Calidad máxima para no perder calidad
+        0,
+        outputPath, // outputPath explícito para crear archivo permanente
+        true, // keepMetadata
+        { mode: 'contain' }
+      );
+
+      console.log('✅ [ACTIVIDAD] Archivo copiado exitosamente a:', result.uri);
+      return result.uri;
+    } catch (error: any) {
+      console.error('❌ [ACTIVIDAD] Error copiando archivo, usando URI original:', error);
+      // Si falla la copia, retornar URI original (puede funcionar si el archivo aún existe)
+      return imageUri;
+    }
+  };
   
   // Hook para conversión de video
   const {
@@ -165,7 +210,24 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
           setShowVideoConversion(true);
         }
         
-        setSelectedImages(prev => [...prev, asset]);
+        // En Android, copiar archivo temporal a lugar permanente inmediatamente
+        if (Platform.OS === 'android' && asset.uri && !asset.type?.startsWith('video/')) {
+          console.log('📱 [ACTIVIDAD] Android detectado - copiando imagen inmediatamente');
+          console.log('🔗 [ACTIVIDAD] URI original:', asset.uri);
+          copyImageToPermanentLocation(asset.uri).then((permanentUri) => {
+            console.log('✅ [ACTIVIDAD] Imagen copiada exitosamente');
+            console.log('🔗 [ACTIVIDAD] URI permanente:', permanentUri);
+            const permanentAsset = { ...asset, uri: permanentUri };
+            setSelectedImages(prev => [...prev, permanentAsset]);
+          }).catch((error) => {
+            console.error('❌ [ACTIVIDAD] Error copiando imagen, usando original:', error);
+            console.error('❌ [ACTIVIDAD] Error details:', error);
+            // Usar original de todas formas - puede funcionar si el archivo aún existe
+            setSelectedImages(prev => [...prev, asset]);
+          });
+        } else {
+          setSelectedImages(prev => [...prev, asset]);
+        }
       }
     });
   };
@@ -173,7 +235,7 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
   const openGallery = () => {
     const options = {
       mediaType: 'mixed', // Permite tanto imágenes como videos
-      includeBase64: false,
+      includeBase64: false, // No usar base64 - copiaremos archivos a lugar permanente
       maxHeight: 2000,
       maxWidth: 2000,
       selectionLimit: 5,
@@ -226,7 +288,31 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
           );
         }
         
-        setSelectedImages(prev => [...prev, ...validAssets]);
+        // En Android, copiar archivos temporales a lugar permanente inmediatamente
+        if (Platform.OS === 'android') {
+          console.log('📱 [ACTIVIDAD] Android detectado - copiando', validAssets.length, 'imágenes inmediatamente');
+          const copyPromises = validAssets.map(async (asset, index) => {
+            if (asset.uri && !asset.type?.startsWith('video/')) {
+              console.log(`📱 [ACTIVIDAD] Copiando imagen ${index + 1}/${validAssets.length}:`, asset.uri.substring(0, 50) + '...');
+              try {
+                const permanentUri = await copyImageToPermanentLocation(asset.uri);
+                console.log(`✅ [ACTIVIDAD] Imagen ${index + 1} copiada a:`, permanentUri.substring(0, 50) + '...');
+                return { ...asset, uri: permanentUri };
+              } catch (error) {
+                console.error(`❌ [ACTIVIDAD] Error copiando imagen ${index + 1}, usando original:`, error);
+                return asset;
+              }
+            }
+            return asset;
+          });
+          
+          Promise.all(copyPromises).then((permanentAssets) => {
+            console.log('✅ [ACTIVIDAD] Todas las imágenes copiadas, agregando a selectedImages');
+            setSelectedImages(prev => [...prev, ...permanentAssets]);
+          });
+        } else {
+          setSelectedImages(prev => [...prev, ...validAssets]);
+        }
       }
     });
   };
@@ -533,6 +619,22 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
     console.log('📸 [ACTIVIDAD] Número de archivos a subir:', selectedImages.length);
     console.log('🔍 [ACTIVIDAD] selectedImages:', selectedImages);
 
+    // Verificar y refrescar token si es necesario antes de subir
+    if (Platform.OS === 'android' && token) {
+      try {
+        const RefreshTokenService = require('../src/services/refreshTokenService').default;
+        // Verificar si el token está próximo a expirar
+        const currentToken = await RefreshTokenService.getAccessToken();
+        if (currentToken) {
+          console.log('🔑 [ACTIVIDAD] Token disponible, verificando validez...');
+        } else {
+          console.warn('⚠️ [ACTIVIDAD] No se pudo obtener token del storage');
+        }
+      } catch (tokenError) {
+        console.error('❌ [ACTIVIDAD] Error verificando token:', tokenError);
+      }
+    }
+
     try {
       // Separar imágenes y videos
       const images = selectedImages.filter(media => !media.type?.startsWith('video/'));
@@ -546,21 +648,295 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
         console.log('🖼️ [ACTIVIDAD] ===== PROCESANDO IMÁGENES =====');
         
         const imageUris = images.map(img => img.uri);
-        const processedImages = await simpleProcessMultipleImages(imageUris, 800, 85);
-        const formDataArray = prepareImagesForUpload(processedImages);
+        console.log('🔗 [ACTIVIDAD] URIs a procesar:', imageUris);
+        
+        let processedImages: any[] = [];
+        let useOriginalImages = false;
+        
+        try {
+          processedImages = await simpleProcessMultipleImages(imageUris, 800, 85);
+          console.log('✅ [ACTIVIDAD] Imágenes procesadas:', processedImages.length);
+          console.log('🔍 [ACTIVIDAD] Detalles de imágenes procesadas:', processedImages.map(img => ({
+            uri: img.uri.substring(0, 50) + '...',
+            width: img.width,
+            height: img.height,
+            size: img.size
+          })));
+          
+          if (processedImages.length === 0) {
+            console.warn('⚠️ [ACTIVIDAD] No se procesaron imágenes, usando imágenes originales');
+            useOriginalImages = true;
+          }
+        } catch (processError: any) {
+          console.error('❌ [ACTIVIDAD] Error procesando imágenes:', processError);
+          console.warn('⚠️ [ACTIVIDAD] Fallback: usando imágenes originales sin procesar');
+          useOriginalImages = true;
+        }
+        
+        // Si falló el procesamiento, usar imágenes originales
+        if (useOriginalImages) {
+          console.log('📤 [ACTIVIDAD] Subiendo imágenes originales sin procesar');
+          for (let i = 0; i < images.length; i++) {
+            const image = images[i];
+            try {
+              console.log(`📤 [ACTIVIDAD] Subiendo imagen original ${i + 1}/${images.length}`);
+              console.log(`🔗 [ACTIVIDAD] URI de imagen original:`, image.uri);
+              console.log(`📱 [ACTIVIDAD] Tipo de imagen:`, image.type);
+              console.log(`📄 [ACTIVIDAD] Nombre de archivo:`, image.fileName);
+              
+              const formData = new FormData();
+              
+              // Usar URI directamente - en Android puede fallar con archivos temporales
+              let imageUri = image.uri;
+              if (Platform.OS === 'android') {
+                if (imageUri.includes('rn_image_picker_lib_temp')) {
+                  console.warn('⚠️ [ACTIVIDAD] ADVERTENCIA: URI es archivo temporal en Android');
+                  console.warn('⚠️ [ACTIVIDAD] Esto puede causar "Network Error" si el archivo ya no es accesible');
+                }
+                if (!imageUri.startsWith('file://') && !imageUri.startsWith('content://')) {
+                  imageUri = `file://${imageUri}`;
+                }
+              }
+              
+              const imageFile = {
+                uri: imageUri,
+                type: image.type || 'image/jpeg',
+                name: image.fileName || `activity-image-${i}.jpg`,
+              } as any;
+              
+              console.log(`📦 [ACTIVIDAD] Preparando FormData:`, {
+                uri: imageFile.uri.substring(0, 80) + '...',
+                type: imageFile.type,
+                name: imageFile.name,
+                hasBase64: !!image.base64
+              });
+              
+              formData.append('image', imageFile);
+              
+              console.log(`📤 [ACTIVIDAD] Enviando request a /upload/s3/image...`);
+              
+              // En Android, usar fetch directamente (más confiable para archivos)
+              // En iOS, usar apiClient (funciona bien)
+              let responseData: any;
+              
+              if (Platform.OS === 'android') {
+                console.log('📱 [ACTIVIDAD] Android - usando fetch directamente');
+                
+                // Obtener el token más reciente del contexto
+                let currentToken = token;
+                if (!currentToken) {
+                  // Intentar obtener del storage si no está en el contexto
+                  try {
+                    const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                    currentToken = await RefreshTokenService.getAccessToken();
+                    console.log('🔑 [ACTIVIDAD] Token obtenido del storage');
+                  } catch (tokenError) {
+                    console.error('❌ [ACTIVIDAD] Error obteniendo token:', tokenError);
+                  }
+                }
+                
+                if (!currentToken) {
+                  throw new Error('No hay token de autenticación disponible');
+                }
+                
+                console.log('🔑 [ACTIVIDAD] Token disponible, longitud:', currentToken.length);
+                console.log('🔑 [ACTIVIDAD] Primeros caracteres del token:', currentToken.substring(0, 20) + '...');
+                
+                const fetchResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+                  method: 'POST',
+                  body: formData,
+                  headers: {
+                    'Authorization': `Bearer ${currentToken}`,
+                    // NO incluir Content-Type - fetch lo establecerá automáticamente con boundary
+                  },
+                });
+                
+                console.log('📡 [ACTIVIDAD] Response status:', fetchResponse.status);
+                
+                if (!fetchResponse.ok) {
+                  const errorText = await fetchResponse.text();
+                  console.error('❌ [ACTIVIDAD] Error response:', errorText);
+                  
+                  // Si es 401, el token puede estar expirado
+                  if (fetchResponse.status === 401) {
+                    console.log('🔄 [ACTIVIDAD] Token expirado, intentando refresh...');
+                    try {
+                      const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                      const newToken = await RefreshTokenService.refreshAccessToken();
+                      if (newToken) {
+                        console.log('✅ [ACTIVIDAD] Token renovado, reintentando upload...');
+                        // Reintentar con el nuevo token
+                        const retryResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+                          method: 'POST',
+                          body: formData,
+                          headers: {
+                            'Authorization': `Bearer ${newToken}`,
+                          },
+                        });
+                        
+                        if (!retryResponse.ok) {
+                          const retryErrorText = await retryResponse.text();
+                          throw new Error(`Error ${retryResponse.status}: ${retryErrorText}`);
+                        }
+                        
+                        responseData = await retryResponse.json();
+                        console.log('✅ [ACTIVIDAD] Imagen subida con fetch después de refresh:', responseData);
+                      } else {
+                        throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+                      }
+                    } catch (refreshError) {
+                      console.error('❌ [ACTIVIDAD] Error refrescando token:', refreshError);
+                      throw new Error(`Error de autenticación: ${errorText}`);
+                    }
+                  } else {
+                    throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+                  }
+                } else {
+                  responseData = await fetchResponse.json();
+                  console.log('✅ [ACTIVIDAD] Imagen subida con fetch:', responseData);
+                }
+              } else {
+                // iOS - usar apiClient
+                const response = await apiClient.post('/upload/s3/image', formData, {
+                  timeout: 120000,
+                });
+                responseData = response.data;
+                console.log('✅ [ACTIVIDAD] Imagen subida con apiClient:', responseData);
+              }
+              
+              if (responseData.imageKey) {
+                uploadedMedia.push(responseData.imageKey);
+                console.log('✅ [ACTIVIDAD] ImageKey agregado. Total:', uploadedMedia.length);
+              } else {
+                console.error('❌ [ACTIVIDAD] ERROR: response.data.imageKey no existe');
+                throw new Error('El servidor no retornó imageKey en la respuesta');
+              }
+            } catch (error: any) {
+              console.error('❌ [ACTIVIDAD] Error subiendo imagen original:', error);
+              console.error('❌ [ACTIVIDAD] Error details:', {
+                message: error?.message,
+                code: error?.code,
+                response: error?.response?.data,
+                status: error?.response?.status,
+                uri: image.uri.substring(0, 100) + '...'
+              });
+              
+              // Si es un Network Error, puede ser que el archivo temporal no sea accesible
+              if (error?.message?.includes('Network Error') || error?.code === 'NETWORK_ERROR') {
+                console.error('❌ [ACTIVIDAD] Network Error - El archivo temporal puede no ser accesible');
+                console.error('❌ [ACTIVIDAD] URI problemática:', image.uri);
+                throw new Error('No se pudo acceder al archivo de imagen. Esto puede ocurrir en Android con archivos temporales. Por favor, selecciona la imagen nuevamente justo antes de enviar la actividad.');
+              }
+              
+              throw new Error(`Error al subir imagen: ${error.message || 'Error desconocido'}`);
+            }
+          }
+        } else {
+          // Usar imágenes procesadas
+          const formDataArray = prepareImagesForUpload(processedImages);
+          console.log('📦 [ACTIVIDAD] FormData array preparado:', formDataArray.length, 'elementos');
 
-        for (let i = 0; i < formDataArray.length; i++) {
-          try {
+          for (let i = 0; i < formDataArray.length; i++) {
+            try {
             console.log(`📤 [ACTIVIDAD] Subiendo imagen ${i + 1}/${formDataArray.length}`);
 
-            // Usar apiClient para que el interceptor maneje el refresh del token
-            // axios maneja automáticamente el Content-Type para FormData
-            const response = await apiClient.post('/upload/s3/image', formDataArray[i], {
-              timeout: 120000, // 2 minutos para imágenes (por si son grandes)
-            });
-
-            console.log('✅ [ACTIVIDAD] Imagen subida exitosamente:', response.data);
-            uploadedMedia.push(response.data.imageKey);
+            // En Android, usar fetch directamente (más confiable para archivos)
+            // En iOS, usar apiClient
+            let responseData: any;
+            
+            if (Platform.OS === 'android') {
+              console.log('📱 [ACTIVIDAD] Android - usando fetch directamente para imagen procesada');
+              
+              // Obtener el token más reciente del contexto
+              let currentToken = token;
+              if (!currentToken) {
+                try {
+                  const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                  currentToken = await RefreshTokenService.getAccessToken();
+                  console.log('🔑 [ACTIVIDAD] Token obtenido del storage para imagen procesada');
+                } catch (tokenError) {
+                  console.error('❌ [ACTIVIDAD] Error obteniendo token:', tokenError);
+                }
+              }
+              
+              if (!currentToken) {
+                throw new Error('No hay token de autenticación disponible');
+              }
+              
+              console.log('🔑 [ACTIVIDAD] Token disponible para imagen procesada, longitud:', currentToken.length);
+              
+              const fetchResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+                method: 'POST',
+                body: formDataArray[i],
+                headers: {
+                  'Authorization': `Bearer ${currentToken}`,
+                  // NO incluir Content-Type - fetch lo establecerá automáticamente
+                },
+              });
+              
+              console.log('📡 [ACTIVIDAD] Response status para imagen procesada:', fetchResponse.status);
+              
+              if (!fetchResponse.ok) {
+                const errorText = await fetchResponse.text();
+                console.error('❌ [ACTIVIDAD] Error response para imagen procesada:', errorText);
+                
+                // Si es 401, el token puede estar expirado
+                if (fetchResponse.status === 401) {
+                  console.log('🔄 [ACTIVIDAD] Token expirado para imagen procesada, intentando refresh...');
+                  try {
+                    const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                    const newToken = await RefreshTokenService.refreshAccessToken();
+                    if (newToken) {
+                      console.log('✅ [ACTIVIDAD] Token renovado, reintentando upload para imagen procesada...');
+                      const retryResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+                        method: 'POST',
+                        body: formDataArray[i],
+                        headers: {
+                          'Authorization': `Bearer ${newToken}`,
+                        },
+                      });
+                      
+                      if (!retryResponse.ok) {
+                        const retryErrorText = await retryResponse.text();
+                        throw new Error(`Error ${retryResponse.status}: ${retryErrorText}`);
+                      }
+                      
+                      responseData = await retryResponse.json();
+                      console.log('✅ [ACTIVIDAD] Imagen procesada subida con fetch después de refresh:', responseData);
+                    } else {
+                      throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+                    }
+                  } catch (refreshError) {
+                    console.error('❌ [ACTIVIDAD] Error refrescando token para imagen procesada:', refreshError);
+                    throw new Error(`Error de autenticación: ${errorText}`);
+                  }
+                } else {
+                  throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+                }
+              } else {
+                responseData = await fetchResponse.json();
+                console.log('✅ [ACTIVIDAD] Imagen procesada subida con fetch:', responseData);
+              }
+            } else {
+              // iOS - usar apiClient
+              const response = await apiClient.post('/upload/s3/image', formDataArray[i], {
+                timeout: 120000,
+              });
+              responseData = response.data;
+              console.log('✅ [ACTIVIDAD] Imagen procesada subida con apiClient:', responseData);
+            }
+            
+            console.log('🔑 [ACTIVIDAD] ImageKey recibido:', responseData.imageKey);
+            
+            // Verificar que imageKey existe
+            if (responseData.imageKey) {
+              uploadedMedia.push(responseData.imageKey);
+              console.log('✅ [ACTIVIDAD] ImageKey agregado a uploadedMedia. Total:', uploadedMedia.length);
+            } else {
+              console.error('❌ [ACTIVIDAD] ERROR: response.data.imageKey no existe');
+              console.error('❌ [ACTIVIDAD] Response completa:', JSON.stringify(responseData, null, 2));
+              throw new Error('El servidor no retornó imageKey en la respuesta');
+            }
           } catch (error: any) {
             console.error('❌ [ACTIVIDAD] Error uploading image:', error);
             
@@ -575,6 +951,7 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
             }
             
             throw new Error(`Error al subir imagen: ${error.message || 'Error desconocido'}`);
+            }
           }
         }
       }
@@ -658,6 +1035,13 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
       }
 
       console.log('✅ [ACTIVIDAD] Todos los archivos subidos exitosamente');
+      console.log('📦 [ACTIVIDAD] uploadedMedia final:', uploadedMedia);
+      console.log('📊 [ACTIVIDAD] Total de archivos subidos:', uploadedMedia.length);
+      
+      if (uploadedMedia.length === 0 && selectedImages.length > 0) {
+        console.warn('⚠️ [ACTIVIDAD] ADVERTENCIA: No se subió ningún archivo aunque había imágenes seleccionadas');
+      }
+      
       return uploadedMedia;
     } catch (error) {
       console.error('❌ [ACTIVIDAD] Error procesando media:', error);
@@ -708,9 +1092,18 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
 
     try {
       console.log('Iniciando upload de media...');
+      console.log('📸 [SUBMIT] Imágenes seleccionadas:', selectedImages.length);
+      
       // 1. Subir media (imágenes y videos)
       const uploadedMedia = await uploadMedia();
-      console.log('Media subida:', uploadedMedia);
+      console.log('✅ [SUBMIT] Media subida:', uploadedMedia);
+      console.log('📊 [SUBMIT] Total de archivos subidos:', uploadedMedia.length);
+      
+      if (uploadedMedia.length === 0 && selectedImages.length > 0) {
+        console.warn('⚠️ [SUBMIT] ADVERTENCIA: No se subió ningún archivo aunque había imágenes seleccionadas');
+        showError('Error', 'No se pudieron subir las imágenes. Por favor, intenta nuevamente.');
+        return;
+      }
 
       // 2. Enviar datos de la actividad
       const activityData = {

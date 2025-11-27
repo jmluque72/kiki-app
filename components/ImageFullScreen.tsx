@@ -129,9 +129,9 @@ const ImageFullScreen: React.FC<ImageFullScreenProps> = ({
         {images.length > 1 && (
           <View style={styles.imageCounter}>
             <View style={styles.counterBackground}>
-              <View style={styles.counterText}>
+              <Text style={styles.counterText}>
                 {currentIndex + 1} / {images.length}
-              </View>
+              </Text>
             </View>
           </View>
         )}

@@ -11,13 +11,13 @@ import {
   Image,
   Platform
 } from 'react-native';
-import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker';
+import { launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native-image-picker';
 import { useAuth } from '../contexts/AuthContextHybrid';
 import { useInstitution } from '../contexts/InstitutionContext';
 import FormRequestService, { FormRequest, FormQuestion, FormResponse } from '../src/services/formRequestService';
 import { toastService } from '../src/services/toastService';
 import { API_FULL_URL } from '../src/config/apiConfig';
-import { checkImagePermissions, checkCameraPermissions } from '../src/utils/permissionUtils';
+import { checkImagePermissions } from '../src/utils/permissionUtils';
 import { apiClient, setAuthToken } from '../src/services/api';
 // Iconos reemplazados con texto/emoji ya que lucide-react-native no está instalado
 
@@ -146,94 +146,40 @@ const CompleteFormScreen: React.FC<CompleteFormScreenProps> = ({ formRequest, on
         return;
       }
 
-      Alert.alert(
-        'Seleccionar Imagen',
-        '¿Desde dónde deseas seleccionar la imagen?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Galería',
-            onPress: () => {
-              launchImageLibrary(
-                {
-                  mediaType: 'photo' as MediaType,
-                  includeBase64: false,
-                  maxHeight: 2000,
-                  maxWidth: 2000,
-                  quality: 0.8,
-                },
-                async (response: ImagePickerResponse) => {
-                  if (response.didCancel || response.errorCode) {
-                    return;
-                  }
-                  if (response.assets && response.assets[0]) {
-                    const asset = response.assets[0];
-                    if (asset.uri) {
-                      try {
-                        setSaving(true);
-                        const fileKey = await uploadFileToS3(
-                          asset.uri,
-                          asset.fileName || 'image.jpg',
-                          asset.type || 'image/jpeg'
-                        );
-                        handleResponseChange(preguntaId, fileKey);
-                        toastService.success('Imagen subida exitosamente');
-                      } catch (error: any) {
-                        console.error('Error subiendo imagen:', error);
-                        toastService.error('Error al subir la imagen');
-                      } finally {
-                        setSaving(false);
-                      }
-                    }
-                  }
-                }
-              );
-            }
-          },
-          {
-            text: 'Cámara',
-            onPress: async () => {
-              const hasCameraPermission = await checkCameraPermissions();
-              if (!hasCameraPermission) {
-                return;
+      // Abrir directamente la galería sin mostrar opciones
+      launchImageLibrary(
+        {
+          mediaType: 'photo' as MediaType,
+          includeBase64: false,
+          maxHeight: 2000,
+          maxWidth: 2000,
+          quality: 0.8,
+        },
+        async (response: ImagePickerResponse) => {
+          if (response.didCancel || response.errorCode) {
+            return;
+          }
+          if (response.assets && response.assets[0]) {
+            const asset = response.assets[0];
+            if (asset.uri) {
+              try {
+                setSaving(true);
+                const fileKey = await uploadFileToS3(
+                  asset.uri,
+                  asset.fileName || 'image.jpg',
+                  asset.type || 'image/jpeg'
+                );
+                handleResponseChange(preguntaId, fileKey);
+                toastService.success('Imagen subida exitosamente');
+              } catch (error: any) {
+                console.error('Error subiendo imagen:', error);
+                toastService.error('Error al subir la imagen');
+              } finally {
+                setSaving(false);
               }
-              launchCamera(
-                {
-                  mediaType: 'photo' as MediaType,
-                  includeBase64: false,
-                  maxHeight: 2000,
-                  maxWidth: 2000,
-                  quality: 0.8,
-                },
-                async (response: ImagePickerResponse) => {
-                  if (response.didCancel || response.errorCode) {
-                    return;
-                  }
-                  if (response.assets && response.assets[0]) {
-                    const asset = response.assets[0];
-                    if (asset.uri) {
-                      try {
-                        setSaving(true);
-                        const fileKey = await uploadFileToS3(
-                          asset.uri,
-                          asset.fileName || 'image.jpg',
-                          asset.type || 'image/jpeg'
-                        );
-                        handleResponseChange(preguntaId, fileKey);
-                        toastService.success('Imagen subida exitosamente');
-                      } catch (error: any) {
-                        console.error('Error subiendo imagen:', error);
-                        toastService.error('Error al subir la imagen');
-                      } finally {
-                        setSaving(false);
-                      }
-                    }
-                  }
-                }
-              );
             }
           }
-        ]
+        }
       );
     } catch (error: any) {
       console.error('Error seleccionando imagen:', error);
@@ -550,7 +496,7 @@ const CompleteFormScreen: React.FC<CompleteFormScreenProps> = ({ formRequest, on
             )}
             {!(isCompleted && estado === 'aprobado') && !respuesta && (
               <Text style={styles.fileHint}>
-                Puedes seleccionar una imagen desde la galería o tomar una foto
+                Puedes seleccionar una imagen desde la galería
               </Text>
             )}
           </View>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,7 +25,30 @@ const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   minDate = new Date(),
   maxDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 año desde hoy
 }) => {
-  const [currentMonth, setCurrentMonth] = useState(selectedDate);
+  // Validar que selectedDate sea una fecha válida
+  const validSelectedDate = selectedDate && !isNaN(selectedDate.getTime()) 
+    ? selectedDate 
+    : new Date();
+  
+  // Asegurar que minDate y maxDate sean válidos
+  const validMinDate = minDate && !isNaN(minDate.getTime()) ? minDate : new Date();
+  const validMaxDate = maxDate && !isNaN(maxDate.getTime()) 
+    ? maxDate 
+    : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  
+  // Asegurar que selectedDate esté dentro del rango válido
+  const clampedSelectedDate = validSelectedDate < validMinDate 
+    ? validMinDate 
+    : (validSelectedDate > validMaxDate ? validMaxDate : validSelectedDate);
+  
+  const [currentMonth, setCurrentMonth] = useState(clampedSelectedDate);
+
+  // Actualizar currentMonth cuando cambie selectedDate o visible
+  useEffect(() => {
+    if (visible && clampedSelectedDate && !isNaN(clampedSelectedDate.getTime())) {
+      setCurrentMonth(clampedSelectedDate);
+    }
+  }, [visible, clampedSelectedDate]);
 
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -35,8 +58,38 @@ const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   const getDaysInMonth = (date: Date) => {
+    // Validar que la fecha sea válida
+    if (!date || isNaN(date.getTime())) {
+      const today = new Date();
+      date = today;
+    }
+    
     const year = date.getFullYear();
     const month = date.getMonth();
+    
+    // Validar que el año y mes sean válidos
+    if (isNaN(year) || isNaN(month) || month < 0 || month > 11) {
+      const today = new Date();
+      const validYear = today.getFullYear();
+      const validMonth = today.getMonth();
+      const firstDay = new Date(validYear, validMonth, 1);
+      const lastDay = new Date(validYear, validMonth + 1, 0);
+      const daysInMonth = lastDay.getDate();
+      const startingDayOfWeek = firstDay.getDay();
+      
+      const days = [];
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        days.push(null);
+      }
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayDate = new Date(validYear, validMonth, day);
+        if (!isNaN(dayDate.getTime())) {
+          days.push(dayDate);
+        }
+      }
+      return days;
+    }
+    
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
@@ -51,18 +104,26 @@ const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
 
     // Agregar todos los días del mes
     for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day));
+      const dayDate = new Date(year, month, day);
+      // Validar que la fecha creada sea válida
+      if (!isNaN(dayDate.getTime())) {
+        days.push(dayDate);
+      }
     }
 
     return days;
   };
 
   const isDateDisabled = (date: Date) => {
-    return date < minDate || date > maxDate;
+    if (!date || isNaN(date.getTime())) return true;
+    return date < validMinDate || date > validMaxDate;
   };
 
   const isDateSelected = (date: Date) => {
-    return date.toDateString() === selectedDate.toDateString();
+    if (!date || isNaN(date.getTime()) || !clampedSelectedDate || isNaN(clampedSelectedDate.getTime())) {
+      return false;
+    }
+    return date.toDateString() === clampedSelectedDate.toDateString();
   };
 
   const isToday = (date: Date) => {
@@ -85,13 +146,15 @@ const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   };
 
   const canGoPrevious = () => {
+    if (!currentMonth || isNaN(currentMonth.getTime())) return false;
     const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-    return prevMonth >= new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    return prevMonth >= new Date(validMinDate.getFullYear(), validMinDate.getMonth(), 1);
   };
 
   const canGoNext = () => {
+    if (!currentMonth || isNaN(currentMonth.getTime())) return false;
     const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-    return nextMonth <= new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+    return nextMonth <= new Date(validMaxDate.getFullYear(), validMaxDate.getMonth(), 1);
   };
 
   const days = getDaysInMonth(currentMonth);
@@ -187,7 +250,7 @@ const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
             <TouchableOpacity
               style={styles.confirmButton}
               onPress={() => {
-                onDateSelect(selectedDate);
+                onDateSelect(clampedSelectedDate);
                 onClose();
               }}
             >

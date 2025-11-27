@@ -83,6 +83,23 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
+    // Si no hay config, rechazar inmediatamente
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+    
+    // Limpiar cualquier flag _retry que pueda estar causando problemas
+    // Esto asegura que cada request se trate de forma independiente
+    if (originalRequest._retry && error.response?.status !== 401) {
+      delete originalRequest._retry;
+    }
+    
+    // Manejar errores 429 (rate limiting) - simplemente rechazar sin retry
+    if (error.response?.status === 429) {
+      console.log('⚠️ [API] Rate limit alcanzado (429), rechazando request');
+      return Promise.reject(error);
+    }
+    
     // Solo manejar refresh automático para errores 401 en endpoints autenticados
     // No interferir con errores de login (que también devuelven 401)
     if (error.response?.status === 401 && 
@@ -106,11 +123,27 @@ apiClient.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
           setAuthToken(newAccessToken);
           
-          // Reintentar la request original
-          return apiClient(originalRequest);
+          // Limpiar el flag _retry antes de reintentar para evitar problemas
+          delete originalRequest._retry;
+          
+          // Crear una nueva request en lugar de reusar la original
+          // Esto evita problemas con el estado persistente
+          const newRequest = {
+            ...originalRequest,
+            headers: {
+              ...originalRequest.headers,
+              Authorization: `Bearer ${newAccessToken}`
+            }
+          };
+          
+          // Reintentar la request
+          return apiClient(newRequest);
         }
       } catch (refreshError) {
         console.error('❌ [API] Error en refresh automático:', refreshError);
+        
+        // Limpiar el flag _retry en caso de error
+        delete originalRequest._retry;
         
         // Si el refresh falla, hacer logout
         console.log('🔐 [API] Refresh falló - Redirigiendo al login');

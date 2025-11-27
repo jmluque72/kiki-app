@@ -127,7 +127,7 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
       if (!selectedStudent) return;
       const promises = [selectedStudent].map(student => 
         apiClient.get(
-          `/api/student-actions/log/student/${student._id}?fechaInicio=${startDateStr}&fechaFin=${endDateStr}`
+          `/student-actions/log/student/${student._id}?fechaInicio=${startDateStr}&fechaFin=${endDateStr}`
         ).catch(err => {
           console.error(`❌ [FAMILY ACTIONS] Error cargando acciones para estudiante ${student._id}:`, err);
           return { data: { data: [] } };
@@ -159,7 +159,7 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
       if (!selectedStudent) return;
       const promises = [selectedStudent].map(student => 
         apiClient.get(
-          `/api/student-actions/log/student/${student._id}?fechaInicio=${selectedDate}&fechaFin=${selectedDate}`
+          `/student-actions/log/student/${student._id}?fechaInicio=${selectedDate}&fechaFin=${selectedDate}`
         ).catch(err => {
           console.error(`❌ [FAMILY ACTIONS] Error cargando acciones del día para estudiante ${student._id}:`, err);
           return { data: { data: [] } };

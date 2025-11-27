@@ -99,17 +99,26 @@ class AutoPushNotificationService {
 
   /**
    * Obtiene el token del dispositivo
+   * Pasa el timeout al servicio subyacente
    */
-  async getToken(): Promise<string | null> {
+  async getToken(timeout?: number): Promise<string | null> {
     if (!this.service) {
       console.warn('⚠️ Servicio no inicializado');
       return null;
     }
 
     try {
-      const token = await this.service.getToken();
-      this.deviceToken = token;
-      return token;
+      // Si el servicio tiene un método getToken con timeout, usarlo
+      if (typeof this.service.getToken === 'function') {
+        const token = await this.service.getToken(timeout);
+        this.deviceToken = token;
+        return token;
+      } else {
+        // Fallback para servicios que no soportan timeout
+        const token = await this.service.getToken();
+        this.deviceToken = token;
+        return token;
+      }
     } catch (error) {
       console.error('❌ Error obteniendo token:', error);
       return null;

@@ -31,21 +31,24 @@ export const useEvents = () => {
       const response = await EventService.getEventsByInstitution(
         selectedInstitution.account._id,
         1,
-        20,
+        10000, // Límite muy alto para obtener todos los eventos
         selectedInstitution?.division?._id
       );
-      setEvents(response.events);
+      
+      // Validar que la respuesta tenga el formato esperado
+      const events = response?.events || [];
+      setEvents(events);
 
       // Separar eventos próximos y pasados
       const now = new Date();
-      const upcoming = response.events.filter(event => new Date(event.fecha) > now);
-      const past = response.events.filter(event => new Date(event.fecha) <= now);
+      const upcoming = events.filter(event => new Date(event.fecha) > now);
+      const past = events.filter(event => new Date(event.fecha) <= now);
 
       setUpcomingEvents(upcoming);
       setPastEvents(past);
 
       console.log('📅 [USE EVENTS] Eventos cargados:', {
-        total: response.events.length,
+        total: events.length,
         upcoming: upcoming.length,
         past: past.length
       });

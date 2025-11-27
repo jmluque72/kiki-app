@@ -82,20 +82,109 @@ const EventosScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotification
     setSelectedCalendarDate(date);
   };
 
-  // Formatear fecha para comparación
-  const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+  // Formatear fecha para comparación (normalizar a fecha local sin hora)
+  const formatDate = (date: Date | string | undefined | null): string => {
+    if (!date) {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    let dateObj: Date;
+    if (date instanceof Date) {
+      dateObj = date;
+    } else if (typeof date === 'string') {
+      dateObj = new Date(date);
+    } else {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    // Validar que la fecha sea válida
+    if (isNaN(dateObj.getTime())) {
+      console.warn('⚠️ [FORMAT DATE] Fecha inválida:', date);
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    try {
+      // Usar fecha local en lugar de ISO para evitar problemas de zona horaria
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.error('❌ [FORMAT DATE] Error formateando fecha:', error, date);
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
   };
 
   // Mapear eventos por día para el calendario semanal
   const eventsByDate = useMemo(() => {
     const map: Record<string, typeof events> = {};
+    console.log('📅 [EVENTS BY DATE] Procesando', events.length, 'eventos');
+    
     events.forEach((ev) => {
-      const evDate = new Date(ev.fecha);
-      const iso = formatDate(evDate);
-      if (!map[iso]) map[iso] = [] as any;
-      (map[iso] as any).push(ev);
+      if (!ev || !ev.fecha) {
+        console.warn('⚠️ [EVENTS BY DATE] Evento sin fecha:', ev);
+        return;
+      }
+      
+      try {
+        // Extraer la fecha directamente del string ISO sin convertir a zona horaria local
+        // Esto evita que eventos del día 30 se muestren como día 29
+        let dateKey: string;
+        if (typeof ev.fecha === 'string') {
+          // Si es string ISO, extraer solo la parte de fecha (YYYY-MM-DD)
+          const isoMatch = ev.fecha.match(/^(\d{4}-\d{2}-\d{2})/);
+          if (isoMatch) {
+            dateKey = isoMatch[1];
+          } else {
+            // Si no es formato ISO, usar Date normal
+            const evDate = new Date(ev.fecha);
+            if (isNaN(evDate.getTime())) {
+              console.warn('⚠️ [EVENTS BY DATE] Fecha inválida en evento:', ev._id, ev.fecha);
+              return;
+            }
+            dateKey = formatDate(evDate);
+          }
+        } else {
+          // Si es Date object, extraer año/mes/día usando fecha local (no UTC)
+          // para que coincida con el formato de los días del calendario
+          const evDate = new Date(ev.fecha);
+          if (isNaN(evDate.getTime())) {
+            console.warn('⚠️ [EVENTS BY DATE] Fecha inválida en evento:', ev._id, ev.fecha);
+            return;
+          }
+          // Usar fecha local para extraer año/mes/día (no UTC)
+          const year = evDate.getFullYear();
+          const month = String(evDate.getMonth() + 1).padStart(2, '0');
+          const day = String(evDate.getDate()).padStart(2, '0');
+          dateKey = `${year}-${month}-${day}`;
+        }
+        
+        console.log('📅 [EVENTS BY DATE] Evento:', ev.titulo, 'Fecha original:', ev.fecha, 'Fecha formateada:', dateKey);
+        
+        if (!map[dateKey]) map[dateKey] = [] as any;
+        (map[dateKey] as any).push(ev);
+      } catch (error) {
+        console.error('❌ [EVENTS BY DATE] Error procesando evento:', ev._id, error);
+      }
     });
+    
+    console.log('📅 [EVENTS BY DATE] Eventos agrupados por fecha:', Object.keys(map));
     return map;
   }, [events]);
 

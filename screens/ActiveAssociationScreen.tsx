@@ -7,27 +7,71 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Image
+  Image,
+  Platform
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import ImageResizer from 'react-native-image-resizer';
 import { fonts } from '../src/config/fonts';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { ActiveAssociationService, AvailableAssociation } from '../src/services/activeAssociationService';
 import { getRoleDisplayName } from '../src/utils/roleTranslations';
 import { processStudentImage, prepareStudentImageForUpload } from '../src/services/studentImageService';
 import { apiClient } from '../src/services/api';
-import { checkImagePermissions } from '../src/utils/permissionUtils';
+import { API_FULL_URL } from '../src/config/apiConfig';
 
 interface ActiveAssociationScreenProps {
   onBack: () => void;
 }
 
 const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBack }) => {
-  const { activeAssociation, refreshActiveAssociation } = useAuth();
+  const { activeAssociation, refreshActiveAssociation, token } = useAuth();
   const [availableAssociations, setAvailableAssociations] = useState<AvailableAssociation[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState<string | null>(null);
+
+  // Función para copiar imagen temporal a lugar permanente en Android
+  const copyImageToPermanentLocation = async (imageUri: string): Promise<string> => {
+    if (Platform.OS !== 'android') {
+      return imageUri; // En iOS, retornar URI original
+    }
+
+    try {
+      console.log('📱 [STUDENT AVATAR] Copiando archivo temporal a lugar permanente:', imageUri);
+      
+      // Si ya es un archivo permanente (no temporal), retornar tal cual
+      if (!imageUri.includes('rn_image_picker_lib_temp')) {
+        console.log('✅ [STUDENT AVATAR] Archivo ya es permanente, no necesita copia');
+        return imageUri;
+      }
+
+      // Usar ImageResizer para copiar el archivo (sin redimensionar, solo copiar)
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(7);
+      const outputPath = `permanent_student_${timestamp}_${random}.jpg`;
+      
+      console.log('📁 [STUDENT AVATAR] Creando copia permanente con outputPath:', outputPath);
+      
+      const result = await ImageResizer.createResizedImage(
+        imageUri,
+        10000, // Dimensiones muy grandes para no redimensionar (solo copiar)
+        10000,
+        'JPEG',
+        100, // Calidad máxima
+        0,
+        outputPath,
+        true, // keepMetadata
+        { mode: 'contain' }
+      );
+
+      console.log('✅ [STUDENT AVATAR] Archivo copiado exitosamente a:', result.uri);
+      return result.uri;
+    } catch (error: any) {
+      console.error('❌ [STUDENT AVATAR] Error copiando archivo, usando URI original:', error);
+      return imageUri;
+    }
+  };
 
 
   useEffect(() => {
@@ -111,12 +155,9 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
     console.log('📱 [GALLERY] Student ID:', student._id);
     console.log('📱 [GALLERY] Active association role:', activeAssociation?.role?.nombre);
     
-    // Verificar permisos primero
-    const hasPermissions = await checkImagePermissions();
-    if (!hasPermissions) {
-      console.log('📱 [GALLERY] Permisos denegados');
-      return;
-    }
+    // react-native-image-picker maneja los permisos internamente
+    // NO verificar permisos manualmente - la librería lo hace automáticamente
+    // En Android 13+, usa READ_MEDIA_IMAGES automáticamente
     
     const options = {
       mediaType: 'photo' as const,
@@ -127,7 +168,17 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
       selectionLimit: 1,
     };
 
+    console.log('📱 [GALLERY] Llamando a launchImageLibrary con opciones:', options);
+    
     launchImageLibrary(options, (response) => {
+      console.log('📱 [GALLERY] Response recibida:', {
+        didCancel: response.didCancel,
+        errorCode: response.errorCode,
+        errorMessage: response.errorMessage,
+        hasAssets: !!response.assets,
+        assetsCount: response.assets?.length || 0
+      });
+      
       if (response.didCancel) {
         console.log('📱 [GALLERY] Usuario canceló la galería');
         return;
@@ -135,13 +186,33 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
       
       if (response.errorCode || response.error) {
         console.error('📱 [GALLERY] Error de galería:', response.errorCode, response.errorMessage);
-        Alert.alert('Error', 'No se pudo abrir la galería');
+        Alert.alert('Error', `No se pudo abrir la galería: ${response.errorMessage || response.errorCode}`);
         return;
       }
       
       if (response.assets && response.assets[0] && response.assets[0].uri) {
-        handleUploadStudentAvatar(student, response.assets[0].uri);
+        const imageUri = response.assets[0].uri;
+        console.log('📱 [GALLERY] Imagen seleccionada:', imageUri);
+        
+        // En Android, copiar la imagen a un lugar permanente antes de procesarla
+        if (Platform.OS === 'android') {
+          console.log('📱 [GALLERY] Android detectado - copiando imagen a lugar permanente...');
+          copyImageToPermanentLocation(imageUri)
+            .then((permanentUri) => {
+              console.log('✅ [GALLERY] Imagen copiada exitosamente a:', permanentUri);
+              handleUploadStudentAvatar(student, permanentUri);
+            })
+            .catch((error) => {
+              console.error('❌ [GALLERY] Error copiando imagen, usando original:', error);
+              // Usar URI original de todas formas - puede funcionar si el archivo aún existe
+              handleUploadStudentAvatar(student, imageUri);
+            });
+        } else {
+          // En iOS, usar directamente
+          handleUploadStudentAvatar(student, imageUri);
+        }
       } else {
+        console.error('📱 [GALLERY] No se encontraron imágenes en la respuesta');
         Alert.alert('Error', 'No se encontraron imágenes');
       }
     });
@@ -159,13 +230,89 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
       // Preparar la imagen para subir
       const formData = prepareStudentImageForUpload(processedImage);
       
-      const response = await apiClient.put(`/students/${student._id}/avatar`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Obtener el token más reciente
+      let currentToken = token;
+      if (!currentToken) {
+        try {
+          const RefreshTokenService = require('../src/services/refreshTokenService').default;
+          currentToken = await RefreshTokenService.getAccessToken();
+          console.log('🔑 [STUDENT AVATAR] Token obtenido del storage');
+        } catch (tokenError) {
+          console.error('❌ [STUDENT AVATAR] Error obteniendo token:', tokenError);
+        }
+      }
       
-      const result = response.data;
+      if (!currentToken) {
+        throw new Error('No hay token de autenticación disponible');
+      }
+      
+      let result: any;
+      
+      // En Android, usar fetch directamente (más confiable para archivos)
+      if (Platform.OS === 'android') {
+        console.log('📱 [STUDENT AVATAR] Android - usando fetch directamente');
+        
+        const fetchResponse = await fetch(`${API_FULL_URL}/students/${student._id}/avatar`, {
+          method: 'PUT',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${currentToken}`,
+            // NO incluir Content-Type - fetch lo establecerá automáticamente con boundary
+          },
+        });
+        
+        console.log('📡 [STUDENT AVATAR] Response status:', fetchResponse.status);
+        
+        if (!fetchResponse.ok) {
+          const errorText = await fetchResponse.text();
+          console.error('❌ [STUDENT AVATAR] Error response:', errorText);
+          
+          // Si es 401, el token puede estar expirado
+          if (fetchResponse.status === 401) {
+            console.log('🔄 [STUDENT AVATAR] Token expirado, intentando refresh...');
+            try {
+              const RefreshTokenService = require('../src/services/refreshTokenService').default;
+              const newToken = await RefreshTokenService.refreshAccessToken();
+              if (newToken) {
+                console.log('✅ [STUDENT AVATAR] Token renovado, reintentando upload...');
+                const retryResponse = await fetch(`${API_FULL_URL}/students/${student._id}/avatar`, {
+                  method: 'PUT',
+                  body: formData,
+                  headers: {
+                    'Authorization': `Bearer ${newToken}`,
+                  },
+                });
+                
+                if (!retryResponse.ok) {
+                  const retryErrorText = await retryResponse.text();
+                  throw new Error(`Error ${retryResponse.status}: ${retryErrorText}`);
+                }
+                
+                result = await retryResponse.json();
+                console.log('✅ [STUDENT AVATAR] Avatar subido con fetch después de refresh:', result);
+              } else {
+                throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+              }
+            } catch (refreshError) {
+              console.error('❌ [STUDENT AVATAR] Error refrescando token:', refreshError);
+              throw new Error(`Error de autenticación: ${errorText}`);
+            }
+          } else {
+            throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+          }
+        } else {
+          result = await fetchResponse.json();
+          console.log('✅ [STUDENT AVATAR] Avatar subido con fetch:', result);
+        }
+      } else {
+        // En iOS, usar apiClient (funciona bien)
+        const response = await apiClient.put(`/students/${student._id}/avatar`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        result = response.data;
+      }
       
       if (result.success) {
         console.log('✅ [STUDENT AVATAR] Avatar del estudiante actualizado exitosamente');
@@ -197,7 +344,8 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
       }
     } catch (error: any) {
       console.error('❌ [STUDENT AVATAR] Error al subir avatar del estudiante:', error);
-      Alert.alert('Error', 'Error al actualizar el avatar del estudiante');
+      const errorMessage = error.message || 'Error al actualizar el avatar del estudiante';
+      Alert.alert('Error', errorMessage);
     } finally {
       setUploadingAvatar(null);
     }
@@ -208,20 +356,6 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
     const isActive = association.isActive;
     const isSwitching = switching === association._id;
     
-    // Debug logs para verificar el campo isActive
-    console.log(`🔍 [ActiveAssociationScreen] ${association.account.nombre} - ${association.role.nombre}:`, {
-      associationId: association._id,
-      isActiveFromAPI: association.isActive,
-      isActive: isActive,
-      isSwitching: isSwitching,
-      hasStudent: !!association.student,
-      studentNombre: association.student?.nombre
-    });
-    
-    // Alert para debug
-    if (association.student) {
-      Alert.alert('DEBUG CARD', `Card: ${association.account.nombre}\nEstudiante: ${association.student.nombre}\nisActive: ${isActive}\nRol: ${association.role.nombre}`);
-    }
 
     return (
       <View
@@ -233,7 +367,12 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
       >
         <TouchableOpacity
           style={styles.cardTouchableArea}
-          onPress={() => !isActive && handleSwitchAssociation(association._id)}
+          onPress={() => {
+            // Solo cambiar asociación si no está activa y no se está subiendo un avatar
+            if (!isActive && !isSwitching && !uploadingAvatar) {
+              handleSwitchAssociation(association._id);
+            }
+          }}
           disabled={isActive || isSwitching}
           activeOpacity={0.7}
         >
@@ -293,6 +432,28 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
             </View>
           </View>
         )}
+        
+        {/* Botón cambiar foto fuera del TouchableOpacity padre para evitar conflictos */}
+        {association.student && isActive && (
+          <View style={styles.changePhotoButtonContainer}>
+            <TouchableOpacity
+              style={styles.changePhotoButton}
+              onPress={() => {
+                console.log('📷 [ActiveAssociationScreen] Botón cambiar foto presionado para:', association.student.nombre);
+                console.log('📷 [ActiveAssociationScreen] Llamando a openGalleryForStudent...');
+                openGalleryForStudent(association.student);
+              }}
+              disabled={uploadingAvatar === association.student._id}
+              activeOpacity={0.7}
+            >
+              {uploadingAvatar === association.student._id ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.changePhotoButtonText}>Cambiar foto</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {!isActive && !isSwitching && (
           <View style={styles.cardFooter}>
@@ -300,36 +461,6 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
           </View>
         )}
         </TouchableOpacity>
-        
-        {/* Botón de cambiar avatar - fuera del TouchableOpacity, solo en la asociación activa */}
-        {(() => {
-          console.log('🔍 [ActiveAssociationScreen] Verificando botón - isActive:', isActive, 'hasStudent:', !!association.student, 'student:', association.student?.nombre);
-          Alert.alert('DEBUG BOTÓN', `isActive: ${isActive}\nhasStudent: ${!!association.student}\nestudiante: ${association.student?.nombre || 'N/A'}`);
-          
-          if (isActive && association.student) {
-            Alert.alert('DEBUG BOTÓN TRUE', `Botón debería aparecer - isActive: ${isActive}, estudiante: ${association.student.nombre}`);
-            return (
-              <TouchableOpacity
-                style={styles.changeAvatarButton}
-                onPress={() => {
-                  Alert.alert('Botón presionado', `Cambiar avatar de ${association.student.nombre}`);
-                  console.log('📷 [ActiveAssociationScreen] Botón cambiar avatar presionado para:', association.student.nombre);
-                  openGalleryForStudent(association.student);
-                }}
-                disabled={uploadingAvatar === association.student._id}
-              >
-                {uploadingAvatar === association.student._id ? (
-                  <ActivityIndicator size="small" color="#0E5FCE" />
-                ) : (
-                  <Text style={styles.changeAvatarButtonText}>Cambiar avatar</Text>
-                )}
-              </TouchableOpacity>
-            );
-          } else {
-            Alert.alert('DEBUG BOTÓN FALSE', `No se muestra botón - isActive: ${isActive}, hasStudent: ${!!association.student}`);
-          }
-          return null;
-        })()}
       </View>
     );
   };
@@ -519,9 +650,11 @@ const styles = StyleSheet.create({
   studentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   studentTextContainer: {
     flex: 1,
+    marginLeft: 8,
   },
   studentAvatarContainer: {
     position: 'relative',
@@ -543,45 +676,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  editStudentAvatarButton: {
-    position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#0E5FCE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 15,
-    zIndex: 1000,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  editStudentAvatarIcon: {
-    width: 16,
-    height: 16,
-    tintColor: '#FFFFFF',
-  },
-  changeAvatarButton: {
-    marginTop: 12,
-    marginBottom: 12,
-    marginHorizontal: 16,
-    paddingVertical: 10,
+  changePhotoButtonContainer: {
     paddingHorizontal: 16,
+    paddingBottom: 8,
+    alignItems: 'flex-end',
+  },
+  changePhotoButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     backgroundColor: '#0E5FCE',
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  changeAvatarButtonText: {
+  changePhotoButtonText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: fonts.medium,

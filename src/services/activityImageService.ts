@@ -1,4 +1,5 @@
 import { processImage, processMultipleImages, ImageProcessingPresets } from './imageProcessor';
+import { Platform } from 'react-native';
 
 export interface ActivityImageUpload {
   imageUri: string;
@@ -62,12 +63,29 @@ export const prepareImagesForUpload = (processedImages: any[]) => {
     // Obtener el nombre del archivo de la URI
     const fileName = image.uri.split('/').pop() || `activity-image-${i}.jpg`;
     
+    // Verificar el tipo de URI en Android
+    if (Platform.OS === 'android') {
+      console.log(`📱 [ACTIVITY IMAGE] Android - URI tipo: ${image.uri.substring(0, 10)}...`);
+      if (image.uri.startsWith('content://')) {
+        console.warn('⚠️ [ACTIVITY IMAGE] ADVERTENCIA: URI es content:// en Android, puede causar problemas en FormData');
+        console.warn('⚠️ [ACTIVITY IMAGE] URI completa:', image.uri);
+      } else if (image.uri.startsWith('file://')) {
+        console.log('✅ [ACTIVITY IMAGE] URI es file://, debería funcionar correctamente');
+      }
+    }
+    
     // Agregar la imagen al FormData
     const imageFile = {
       uri: image.uri,
       type: 'image/jpeg',
       name: fileName,
     } as any;
+    
+    console.log(`📤 [ACTIVITY IMAGE] Preparando imagen ${i + 1}:`, {
+      uri: image.uri.substring(0, 50) + '...',
+      fileName,
+      platform: Platform.OS
+    });
     
     formData.append('image', imageFile);
     formDataArray.push(formData);

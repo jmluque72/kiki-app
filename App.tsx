@@ -19,9 +19,8 @@ import AuthSync from './components/AuthSync';
 import AuthWrapper from './components/AuthWrapper';
 import { SplashScreen } from './components/SplashScreen';
 import ErrorBoundary from './components/ErrorBoundary';
-// import PushNotificationService from './src/services/pushNotificationService';
 import { toastConfig } from './src/config/toastConfig';
-// import { usePushNotifications } from './src/hooks/usePushNotifications';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 
 const AppContent = () => {
   const { isAuthenticated, isLoading, associations, user, updateUserAfterPasswordChange } = useAuth();
@@ -36,18 +35,27 @@ const AppContent = () => {
   const [showActiveAssociation, setShowActiveAssociation] = useState(false);
 
   // Inicializar push notifications cuando el usuario esté autenticado
-  // const pushNotifications = usePushNotifications();
-  
+  const pushNotifications = usePushNotifications();
   
   // Debug: log cuando el usuario está autenticado
-  // useEffect(() => {
-  //   appLogger.push('Push notifications hook status', {
-  //     isEnabled: pushNotifications.isEnabled,
-  //     token: pushNotifications.token,
-  //     loading: pushNotifications.loading,
-  //     error: pushNotifications.error
-  //   });
-  // }, [pushNotifications]);
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      console.log('🔔 [APP] Push notifications hook status:', {
+        isEnabled: pushNotifications.isEnabled,
+        hasToken: !!pushNotifications.token,
+        tokenPreview: pushNotifications.token ? pushNotifications.token.substring(0, 20) + '...' : null,
+        loading: pushNotifications.loading,
+        error: pushNotifications.error
+      });
+      
+      appLogger.push('Push notifications hook status', {
+        isEnabled: pushNotifications.isEnabled,
+        hasToken: !!pushNotifications.token,
+        loading: pushNotifications.loading,
+        error: pushNotifications.error
+      });
+    }
+  }, [pushNotifications.isEnabled, pushNotifications.token, pushNotifications.loading, pushNotifications.error, isAuthenticated, user]);
 
 
   // Detectar primer login y mostrar pantalla de cambio de contraseña

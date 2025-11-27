@@ -167,8 +167,21 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
 
   // Función para verificar si una notificación está leída
   const isNotificationRead = (notification: any) => {
-    return notification.status === 'read' || 
-           notification.readBy?.some((read: any) => read.user === user?._id);
+    if (notification.status === 'read') {
+      return true;
+    }
+    
+    // Verificar si el usuario actual está en readBy
+    // read.user puede ser un ObjectId (string) o un objeto con _id
+    if (notification.readBy && Array.isArray(notification.readBy)) {
+      return notification.readBy.some((read: any) => {
+        const readUserId = read.user?._id || read.user;
+        const currentUserId = user?._id;
+        return readUserId && currentUserId && readUserId.toString() === currentUserId.toString();
+      });
+    }
+    
+    return false;
   };
 
   // Función para seleccionar/deseleccionar un alumno
@@ -422,11 +435,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         {isCoordinador && (
           <View style={styles.coordinatorButtonsContainer}>
             <TouchableOpacity
-              style={styles.detailsButton}
+              style={[styles.detailsButton, loadingDetails && styles.detailsButtonDisabled]}
               onPress={() => handleShowDetails(item._id)}
               activeOpacity={0.7}
+              disabled={loadingDetails}
             >
-              <Text style={styles.detailsButtonText}>Ver Detalles</Text>
+              <Text style={[styles.detailsButtonText, loadingDetails && styles.detailsButtonTextDisabled]}>
+                {loadingDetails ? 'Cargando...' : 'Ver Detalles'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
@@ -1344,6 +1360,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  detailsButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+    opacity: 0.6,
+  },
+  detailsButtonTextDisabled: {
+    color: '#999999',
   },
   // Estilos para el modal de detalles
   detailsModalContainer: {

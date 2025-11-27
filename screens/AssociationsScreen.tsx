@@ -11,9 +11,11 @@ import {
   Modal,
   TextInput,
   Alert,
-  RefreshControl
+  RefreshControl,
+  Platform
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import ImageResizer from 'react-native-image-resizer';
 import { useAuth } from "../contexts/AuthContextHybrid"
 import { useInstitution } from '../contexts/InstitutionContext';
 import { ActiveAssociationService } from '../src/services/activeAssociationService';
@@ -23,15 +25,57 @@ import { fonts } from '../src/config/fonts';
 import SharedService from '../src/services/sharedService';
 import { processStudentImage, prepareStudentImageForUpload } from '../src/services/studentImageService';
 import { apiClient } from '../src/services/api';
-import { checkImagePermissions } from '../src/utils/permissionUtils';
+import { API_FULL_URL } from '../src/config/apiConfig';
 
 interface AssociationsScreenProps {
   onBack: () => void;
 }
 
 const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
-  const { user, activeAssociation, associations, refreshActiveAssociation, logout } = useAuth();
+  const { user, activeAssociation, associations, refreshActiveAssociation, logout, token } = useAuth();
   const { userAssociations, setUserAssociations } = useInstitution();
+
+  // Función para copiar imagen temporal a lugar permanente en Android
+  const copyImageToPermanentLocation = async (imageUri: string): Promise<string> => {
+    if (Platform.OS !== 'android') {
+      return imageUri; // En iOS, retornar URI original
+    }
+
+    try {
+      console.log('📱 [STUDENT AVATAR] Copiando archivo temporal a lugar permanente:', imageUri);
+      
+      // Si ya es un archivo permanente (no temporal), retornar tal cual
+      if (!imageUri.includes('rn_image_picker_lib_temp')) {
+        console.log('✅ [STUDENT AVATAR] Archivo ya es permanente, no necesita copia');
+        return imageUri;
+      }
+
+      // Usar ImageResizer para copiar el archivo (sin redimensionar, solo copiar)
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(7);
+      const outputPath = `permanent_student_${timestamp}_${random}.jpg`;
+      
+      console.log('📁 [STUDENT AVATAR] Creando copia permanente con outputPath:', outputPath);
+      
+      const result = await ImageResizer.createResizedImage(
+        imageUri,
+        10000, // Dimensiones muy grandes para no redimensionar (solo copiar)
+        10000,
+        'JPEG',
+        100, // Calidad máxima
+        0,
+        outputPath,
+        true, // keepMetadata
+        { mode: 'contain' }
+      );
+
+      console.log('✅ [STUDENT AVATAR] Archivo copiado exitosamente a:', result.uri);
+      return result.uri;
+    } catch (error: any) {
+      console.error('❌ [STUDENT AVATAR] Error copiando archivo, usando URI original:', error);
+      return imageUri;
+    }
+  };
   
   // Debug: Verificar que los contextos estén funcionando
   console.log('DEBUG AssociationsScreen - useAuth context:', { user, activeAssociation, associations });
@@ -151,12 +195,9 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
     console.log('📱 [GALLERY] Abriendo galería para estudiante:', student.nombre);
     console.log('📱 [GALLERY] Student ID:', student._id);
     
-    // Verificar permisos primero
-    const hasPermissions = await checkImagePermissions();
-    if (!hasPermissions) {
-      console.log('📱 [GALLERY] Permisos denegados');
-      return;
-    }
+    // react-native-image-picker maneja los permisos internamente
+    // NO verificar permisos manualmente - la librería lo hace automáticamente
+    // En Android 13+, usa READ_MEDIA_IMAGES automáticamente
     
     const options = {
       mediaType: 'photo' as const,
@@ -167,6 +208,8 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
       selectionLimit: 1,
     };
 
+    console.log('📱 [GALLERY] Llamando a launchImageLibrary con opciones:', options);
+    
     launchImageLibrary(options, (response) => {
       if (response.didCancel) {
         console.log('📱 [GALLERY] Usuario canceló la selección');
@@ -180,7 +223,26 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
       }
 
       if (response.assets && response.assets.length > 0 && response.assets[0]?.uri) {
-        handleUploadStudentAvatar(student, response.assets[0].uri);
+        const imageUri = response.assets[0].uri;
+        console.log('📱 [GALLERY] Imagen seleccionada:', imageUri);
+        
+        // En Android, copiar la imagen a un lugar permanente antes de procesarla
+        if (Platform.OS === 'android') {
+          console.log('📱 [GALLERY] Android detectado - copiando imagen a lugar permanente...');
+          copyImageToPermanentLocation(imageUri)
+            .then((permanentUri) => {
+              console.log('✅ [GALLERY] Imagen copiada exitosamente a:', permanentUri);
+              handleUploadStudentAvatar(student, permanentUri);
+            })
+            .catch((error) => {
+              console.error('❌ [GALLERY] Error copiando imagen, usando original:', error);
+              // Usar URI original de todas formas - puede funcionar si el archivo aún existe
+              handleUploadStudentAvatar(student, imageUri);
+            });
+        } else {
+          // En iOS, usar directamente
+          handleUploadStudentAvatar(student, imageUri);
+        }
       } else {
         Alert.alert('Error', 'No se encontraron imágenes válidas');
       }
@@ -225,13 +287,89 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
       // Preparar la imagen para subir
       const formData = prepareStudentImageForUpload(processedImage);
       
-      const response = await apiClient.put(`/students/${student._id}/avatar`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Obtener el token más reciente
+      let currentToken = token;
+      if (!currentToken) {
+        try {
+          const RefreshTokenService = require('../src/services/refreshTokenService').default;
+          currentToken = await RefreshTokenService.getAccessToken();
+          console.log('🔑 [STUDENT AVATAR] Token obtenido del storage');
+        } catch (tokenError) {
+          console.error('❌ [STUDENT AVATAR] Error obteniendo token:', tokenError);
+        }
+      }
       
-      const result = response.data;
+      if (!currentToken) {
+        throw new Error('No hay token de autenticación disponible');
+      }
+      
+      let result: any;
+      
+      // En Android, usar fetch directamente (más confiable para archivos)
+      if (Platform.OS === 'android') {
+        console.log('📱 [STUDENT AVATAR] Android - usando fetch directamente');
+        
+        const fetchResponse = await fetch(`${API_FULL_URL}/students/${student._id}/avatar`, {
+          method: 'PUT',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${currentToken}`,
+            // NO incluir Content-Type - fetch lo establecerá automáticamente con boundary
+          },
+        });
+        
+        console.log('📡 [STUDENT AVATAR] Response status:', fetchResponse.status);
+        
+        if (!fetchResponse.ok) {
+          const errorText = await fetchResponse.text();
+          console.error('❌ [STUDENT AVATAR] Error response:', errorText);
+          
+          // Si es 401, el token puede estar expirado
+          if (fetchResponse.status === 401) {
+            console.log('🔄 [STUDENT AVATAR] Token expirado, intentando refresh...');
+            try {
+              const RefreshTokenService = require('../src/services/refreshTokenService').default;
+              const newToken = await RefreshTokenService.refreshAccessToken();
+              if (newToken) {
+                console.log('✅ [STUDENT AVATAR] Token renovado, reintentando upload...');
+                const retryResponse = await fetch(`${API_FULL_URL}/students/${student._id}/avatar`, {
+                  method: 'PUT',
+                  body: formData,
+                  headers: {
+                    'Authorization': `Bearer ${newToken}`,
+                  },
+                });
+                
+                if (!retryResponse.ok) {
+                  const retryErrorText = await retryResponse.text();
+                  throw new Error(`Error ${retryResponse.status}: ${retryErrorText}`);
+                }
+                
+                result = await retryResponse.json();
+                console.log('✅ [STUDENT AVATAR] Avatar subido con fetch después de refresh:', result);
+              } else {
+                throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+              }
+            } catch (refreshError) {
+              console.error('❌ [STUDENT AVATAR] Error refrescando token:', refreshError);
+              throw new Error(`Error de autenticación: ${errorText}`);
+            }
+          } else {
+            throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
+          }
+        } else {
+          result = await fetchResponse.json();
+          console.log('✅ [STUDENT AVATAR] Avatar subido con fetch:', result);
+        }
+      } else {
+        // En iOS, usar apiClient (funciona bien)
+        const response = await apiClient.put(`/students/${student._id}/avatar`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        result = response.data;
+      }
       
       if (result.success) {
         console.log('✅ [STUDENT AVATAR] Avatar actualizado exitosamente');
@@ -381,29 +519,6 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
                                 </Text>
                               </View>
                             )}
-                            {/* Botón de cámara sobre el avatar - solo en la asociación activa y si es familyadmin */}
-                            {isActive && (item.role?.nombre === 'familyadmin' || isFamilyAdmin) && (
-                              <View style={styles.editStudentAvatarButton}>
-                                <TouchableOpacity
-                                  style={styles.editStudentAvatarButtonInner}
-                                  onPress={() => {
-                                    openGalleryForStudent(item.student);
-                                  }}
-                                  disabled={uploadingAvatar === item.student._id}
-                                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                  {uploadingAvatar === item.student._id ? (
-                                    <ActivityIndicator size="small" color="#FFFFFF" />
-                                  ) : (
-                                    <Image
-                                      source={require('../assets/design/icons/camera.png')}
-                                      style={styles.editStudentAvatarIcon}
-                                      resizeMode="contain"
-                                    />
-                                  )}
-                                </TouchableOpacity>
-                              </View>
-                            )}
                           </View>
                           <View style={styles.studentTextContainer}>
                             <Text style={styles.studentName}>
@@ -413,6 +528,22 @@ const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
                               {getRoleDisplayName(item.role?.nombre || '')}
                             </Text>
                           </View>
+                          {/* Botón "Cambiar foto" a la derecha - solo en la asociación activa y si es familyadmin */}
+                          {isActive && (item.role?.nombre === 'familyadmin' || isFamilyAdmin) && (
+                            <TouchableOpacity
+                              style={styles.changePhotoButton}
+                              onPress={() => {
+                                openGalleryForStudent(item.student);
+                              }}
+                              disabled={uploadingAvatar === item.student._id}
+                            >
+                              {uploadingAvatar === item.student._id ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                              ) : (
+                                <Text style={styles.changePhotoButtonText}>Cambiar foto</Text>
+                              )}
+                            </TouchableOpacity>
+                          )}
                         </View>
                       )}
                       {!item.student && (
@@ -615,9 +746,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 10,
+    justifyContent: 'space-between',
   },
   studentAvatarContainer: {
-    position: 'relative',
     marginRight: 10,
   },
   studentAvatar: {
@@ -638,31 +769,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  editStudentAvatarButton: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#0E5FCE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  editStudentAvatarButtonInner: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editStudentAvatarIcon: {
-    width: 20,
-    height: 20,
-    tintColor: '#FFFFFF',
-  },
   studentTextContainer: {
     flex: 1,
+    marginLeft: 8,
+  },
+  changePhotoButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#0E5FCE',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  changePhotoButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   studentName: {
     fontSize: 14,

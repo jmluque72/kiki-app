@@ -63,7 +63,27 @@ class EventService {
     const response = await apiClient.get(
       `/events/institution/${institutionId}?${query}`
     );
-    return response.data.data;
+    
+    // Validar y normalizar la respuesta
+    const data = response.data?.data || response.data;
+    
+    // Si la respuesta es un array directamente, convertirla al formato esperado
+    if (Array.isArray(data)) {
+      return {
+        events: data,
+        total: data.length,
+        page: page,
+        limit: limit
+      };
+    }
+    
+    // Si ya tiene el formato correcto, devolverlo
+    return {
+      events: data?.events || [],
+      total: data?.total || 0,
+      page: data?.page || page,
+      limit: data?.limit || limit
+    };
   }
 
   // Obtener eventos próximos

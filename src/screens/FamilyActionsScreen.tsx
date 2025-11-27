@@ -110,7 +110,7 @@ const FamilyActionsScreen: React.FC = () => {
       
       for (const student of students) {
         try {
-          const response = await apiClient.get(`/api/student-actions/log/student/${student._id}?fecha=${date}`);
+          const response = await apiClient.get(`/student-actions/log/student/${student._id}?fecha=${date}`);
           if (response.data.success) {
             allActions.push(...response.data.data);
           }
