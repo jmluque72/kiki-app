@@ -50,7 +50,7 @@ interface User {
   updatedAt: string;
 }
 
-const PerfilScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenActiveAssociation }: { onOpenNotifications: () => void; onOpenMenu?: () => void; onOpenActiveAssociation?: () => void }) => {
+const PerfilScreen = ({ onBack, onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenActiveAssociation }: { onBack?: () => void; onOpenNotifications: () => void; onOpenMenu?: () => void; onOpenActiveAssociation?: () => void }) => {
   const { logout, user: authUser, login, activeAssociation, refreshActiveAssociation, token } = useAuth();
 
   // Función para copiar imagen temporal a lugar permanente en Android
@@ -757,13 +757,170 @@ const PerfilScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenA
     avatar: activeStudent.avatar
   } : null);
 
+  // Funciones helper para la barra azul
+  const getActiveInstitution = () => {
+    if (selectedInstitution) {
+      return selectedInstitution;
+    }
+    if (userAssociations.length > 0) {
+      return userAssociations[0];
+    }
+    return null;
+  };
+
+  const activeInstitution = getActiveInstitution();
+
+  const getInstitutionName = () => {
+    if (activeInstitution?.account) {
+      return activeInstitution.account.nombre;
+    }
+    return 'La Salle'; // Fallback
+  };
+
+  const getDivisionName = () => {
+    if (activeInstitution?.division?.nombre) {
+      return activeInstitution.division.nombre;
+    }
+    return 'Todas';
+  };
+
+  const getRoleDisplayNameLocal = () => {
+    if (activeAssociation?.role?.nombre) {
+      return getRoleDisplayName(activeAssociation.role.nombre);
+    }
+    if (authUser?.role?.nombre) {
+      return getRoleDisplayName(authUser.role.nombre);
+    }
+    return '';
+  };
+
   return (
     <View style={styles.perfilContainer}>
-              <CommonHeader 
-          onOpenNotifications={onOpenNotifications} 
-          onOpenMenu={openMenu}
-          activeStudent={activeStudent}
-        />
+      {/* Botón de volver si se abre como modal */}
+      {onBack && (
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalHeaderTitle}>Perfil</Text>
+        </View>
+      )}
+      
+      {/* Sección azul con información del estudiante/institución */}
+      <View style={styles.greetingSection}>
+        {/* Nombre del Estudiante/Coordinador y Rol */}
+        <View style={styles.sectionPart}>
+          {(() => {
+            const currentRole = activeAssociation?.role?.nombre || authUser?.role?.nombre;
+            const studentData = getActiveStudent();
+            
+            // Para coordinadores, mostrar nombre del coordinador
+            if (currentRole === 'coordinador' && authUser?.name) {
+              return (
+                <>
+                  <Text style={styles.sectionValue}>
+                    {authUser.name}
+                  </Text>
+                  {getRoleDisplayNameLocal() && (
+                    <Text style={styles.roleText}>
+                      {getRoleDisplayNameLocal()}
+                    </Text>
+                  )}
+                </>
+              );
+            }
+            
+            // Para roles familiares, mostrar nombre y apellido en líneas separadas
+            if ((currentRole === 'familyadmin' || currentRole === 'familyviewer') && studentData) {
+              return (
+                <>
+                  <Text style={styles.sectionValue}>
+                    {studentData.nombre}
+                  </Text>
+                  <Text style={styles.sectionValue}>
+                    {studentData.apellido}
+                  </Text>
+                  {getRoleDisplayNameLocal() && (
+                    <Text style={styles.roleText}>
+                      {getRoleDisplayNameLocal()}
+                    </Text>
+                  )}
+                </>
+              );
+            }
+            
+            return null;
+          })()}
+        </View>
+        
+        {/* Avatar centrado */}
+        <View style={styles.avatarSection}>
+          <View style={styles.avatar}>
+            {(() => {
+              const currentRole = activeAssociation?.role?.nombre || authUser?.role?.nombre;
+              const studentData = getActiveStudent();
+              
+              // Para coordinadores, mostrar su propio avatar
+              if (currentRole === 'coordinador' && authUser?.avatar) {
+                return (
+                  <Image 
+                    source={{ uri: authUser.avatar }} 
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                );
+              } 
+              
+              // Para familyadmin y familyviewer, mostrar avatar del estudiante
+              if (currentRole === 'familyadmin' || currentRole === 'familyviewer') {
+                if (activeAssociation?.student?.avatar) {
+                  return (
+                    <Image 
+                      source={{ uri: activeAssociation.student.avatar }} 
+                      style={styles.avatarImage}
+                      resizeMode="cover"
+                    />
+                  );
+                }
+                
+                if (studentData?.avatar) {
+                  return (
+                    <Image 
+                      source={{ uri: studentData.avatar }} 
+                      style={styles.avatarImage}
+                      resizeMode="cover"
+                    />
+                  );
+                }
+                
+                return (
+                  <Image
+                    source={require('../assets/design/icons/kiki_logo_header.png')}
+                    style={styles.avatarLogo}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              
+              return (
+                <Image
+                  source={require('../assets/design/icons/kiki_logo_header.png')}
+                  style={styles.avatarLogo}
+                  resizeMode="contain"
+                />
+              );
+            })()}
+          </View>
+        </View>
+        
+        {/* Institución y División */}
+        <View style={styles.sectionPart}>
+          <Text style={styles.sectionValue}>{getInstitutionName()}</Text>
+          <Text style={styles.divisionText}>
+            {getDivisionName()}
+          </Text>
+        </View>
+      </View>
       
       <KeyboardAvoidingView
         style={styles.perfilContent}
@@ -998,6 +1155,9 @@ const PerfilScreen = ({ onOpenNotifications, onOpenMenu: onOpenMenuProp, onOpenA
                   closeMenu();
                   onOpenActiveAssociation?.();
                 }}
+                onOpenPerfil={() => {
+                  // Ya estamos en PerfilScreen, no hacer nada
+                }}
                 openFormularios={() => {
                   closeMenu();
                   setShowFormularios(true);
@@ -1035,8 +1195,7 @@ const styles = StyleSheet.create({
   perfilContainer: {
     flex: 1,
     backgroundColor: '#F5F5F5',
-    paddingTop: 50, // Reducido para eliminar espacio extra
-
+    paddingTop: 0,
   },
   perfilContent: {
     flex: 1,
@@ -1785,6 +1944,90 @@ const styles = StyleSheet.create({
     backgroundColor: '#0E5FCE',
     zIndex: 9999,
     elevation: 9999,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 15,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  backButton: {
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 15,
+  },
+  backButtonText: {
+    fontSize: 18,
+    color: '#374151',
+    fontWeight: 'bold',
+  },
+  modalHeaderTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0E5FCE',
+  },
+  greetingSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0E5FCE',
+    paddingHorizontal: 0,
+    paddingVertical: 15,
+    marginHorizontal: 0,
+    marginTop: 0,
+  },
+  sectionPart: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  sectionValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  roleText: {
+    fontSize: 12,
+    fontWeight: 'normal',
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  divisionText: {
+    fontSize: 12,
+    fontWeight: 'normal',
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  avatarSection: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 30,
+  },
+  avatarLogo: {
+    width: '80%',
+    height: '80%',
   },
 });
 

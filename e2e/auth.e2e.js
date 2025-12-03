@@ -1,3 +1,4 @@
+const { device, expect, element, by, waitFor } = require('detox');
 const { TestUtils } = require('./utils/testUtils');
 const { Selectors } = require('./utils/selectors');
 
@@ -19,14 +20,14 @@ describe('Authentication E2E Tests', () => {
   describe('Login Flow', () => {
     it('should login successfully with valid credentials', async () => {
       // Verificar que estamos en la pantalla de login
-      await expect(element(Selectors.loginScreen)).toBeVisible();
+      await expect(element(Selectors.loginScreen())).toBeVisible();
       
       // Ingresar credenciales válidas
-      await element(Selectors.emailInput).typeText('test@example.com');
-      await element(Selectors.passwordInput).typeText('password123');
+      await element(Selectors.emailInput()).typeText('test@example.com');
+      await element(Selectors.passwordInput()).typeText('password123');
       
       // Presionar botón de login
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.loginButton()).tap();
       
       // Verificar que navegamos a la pantalla de selección de cuenta
       await TestUtils.waitForElement('account-selection-screen', 5000);
@@ -37,9 +38,9 @@ describe('Authentication E2E Tests', () => {
 
     it('should show error with invalid email format', async () => {
       // Ingresar email inválido
-      await element(Selectors.emailInput).typeText('invalid-email');
-      await element(Selectors.passwordInput).typeText('password123');
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.emailInput()).typeText('invalid-email');
+      await element(Selectors.passwordInput()).typeText('password123');
+      await element(Selectors.loginButton()).tap();
       
       // Verificar mensaje de error
       await expect(element(by.text('Por favor, ingresa un email válido'))).toBeVisible();
@@ -47,9 +48,9 @@ describe('Authentication E2E Tests', () => {
 
     it('should show error with incorrect password', async () => {
       // Ingresar credenciales incorrectas
-      await element(Selectors.emailInput).typeText('test@example.com');
-      await element(Selectors.passwordInput).typeText('wrongpassword');
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.emailInput()).typeText('test@example.com');
+      await element(Selectors.passwordInput()).typeText('wrongpassword');
+      await element(Selectors.loginButton()).tap();
       
       // Verificar mensaje de error
       await expect(element(by.text('Credenciales inválidas'))).toBeVisible();
@@ -57,9 +58,9 @@ describe('Authentication E2E Tests', () => {
 
     it('should show error with non-existent user', async () => {
       // Ingresar credenciales de usuario inexistente
-      await element(Selectors.emailInput).typeText('nonexistent@example.com');
-      await element(Selectors.passwordInput).typeText('password123');
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.emailInput()).typeText('nonexistent@example.com');
+      await element(Selectors.passwordInput()).typeText('password123');
+      await element(Selectors.loginButton()).tap();
       
       // Verificar mensaje de error
       await expect(element(by.text('Usuario no encontrado'))).toBeVisible();
@@ -67,14 +68,14 @@ describe('Authentication E2E Tests', () => {
 
     it('should disable login button while loading', async () => {
       // Ingresar credenciales
-      await element(Selectors.emailInput).typeText('test@example.com');
-      await element(Selectors.passwordInput).typeText('password123');
+      await element(Selectors.emailInput()).typeText('test@example.com');
+      await element(Selectors.passwordInput()).typeText('password123');
       
       // Presionar botón de login
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.loginButton()).tap();
       
       // Verificar que el botón está deshabilitado durante la carga
-      await expect(element(Selectors.loginButton)).toHaveId('loading');
+      await expect(element(Selectors.loginButton())).toHaveId('loading');
     });
 
     it('should handle network errors gracefully', async () => {
@@ -82,9 +83,9 @@ describe('Authentication E2E Tests', () => {
       await device.disableSynchronization();
       
       // Intentar login
-      await element(Selectors.emailInput).typeText('test@example.com');
-      await element(Selectors.passwordInput).typeText('password123');
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.emailInput()).typeText('test@example.com');
+      await element(Selectors.passwordInput()).typeText('password123');
+      await element(Selectors.loginButton()).tap();
       
       // Verificar mensaje de error de red
       await expect(element(by.text('Error de red. Verifica tu conexión.'))).toBeVisible();
@@ -112,7 +113,7 @@ describe('Authentication E2E Tests', () => {
       await element(by.text('Sí')).tap();
       
       // Verificar que volvimos a la pantalla de login
-      await expect(element(Selectors.loginScreen)).toBeVisible();
+      await expect(element(Selectors.loginScreen())).toBeVisible();
       
       // Verificar que no hay sesión activa
       await expect(element(by.id('email-input'))).toHaveText('');
@@ -136,12 +137,12 @@ describe('Authentication E2E Tests', () => {
   describe('Remember Me Feature', () => {
     it('should remember credentials when checkbox is selected', async () => {
       // Ingresar credenciales y seleccionar "Recordarme"
-      await element(Selectors.emailInput).typeText('test@example.com');
-      await element(Selectors.passwordInput).typeText('password123');
+      await element(Selectors.emailInput()).typeText('test@example.com');
+      await element(Selectors.passwordInput()).typeText('password123');
       await element(by.id('remember-me-checkbox')).tap();
       
       // Login
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.loginButton()).tap();
       
       // Esperar a que se complete el login
       await TestUtils.waitForElement('home-screen', 5000);
@@ -152,17 +153,17 @@ describe('Authentication E2E Tests', () => {
       await element(by.text('Sí')).tap();
       
       // Verificar que las credenciales están recordadas
-      await expect(element(Selectors.emailInput)).toHaveText('test@example.com');
+      await expect(element(Selectors.emailInput())).toHaveText('test@example.com');
     });
 
     it('should not remember credentials when checkbox is not selected', async () => {
       // Ingresar credenciales sin seleccionar "Recordarme"
-      await element(Selectors.emailInput).typeText('test@example.com');
-      await element(Selectors.passwordInput).typeText('password123');
+      await element(Selectors.emailInput()).typeText('test@example.com');
+      await element(Selectors.passwordInput()).typeText('password123');
       // No seleccionar checkbox
       
       // Login
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.loginButton()).tap();
       
       // Esperar a que se complete el login
       await TestUtils.waitForElement('home-screen', 5000);
@@ -173,7 +174,7 @@ describe('Authentication E2E Tests', () => {
       await element(by.text('Sí')).tap();
       
       // Verificar que las credenciales no están recordadas
-      await expect(element(Selectors.emailInput)).toHaveText('');
+      await expect(element(Selectors.emailInput())).toHaveText('');
     });
   });
 
@@ -228,7 +229,7 @@ describe('Authentication E2E Tests', () => {
       await element(by.id('protected-action')).tap();
       
       // Verificar que se redirige al login
-      await expect(element(Selectors.loginScreen)).toBeVisible();
+      await expect(element(Selectors.loginScreen())).toBeVisible();
       await expect(element(by.text('Tu sesión ha expirado'))).toBeVisible();
     });
   });
@@ -243,14 +244,14 @@ describe('Authentication E2E Tests', () => {
 
     it('should support keyboard navigation', async () => {
       // Navegar con tab (esto puede requerir configuración específica del dispositivo)
-      await element(Selectors.emailInput).tap();
-      await element(Selectors.emailInput).typeText('test@example.com');
+      await element(Selectors.emailInput()).tap();
+      await element(Selectors.emailInput()).typeText('test@example.com');
       
       // Moverse al siguiente campo
       await element(by.id('next-button')).tap();
       
       // Verificar que el foco está en el campo de contraseña
-      await expect(element(Selectors.passwordInput)).toBeFocused();
+      await expect(element(Selectors.passwordInput())).toBeFocused();
     });
   });
 

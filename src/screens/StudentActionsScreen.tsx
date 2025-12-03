@@ -36,6 +36,7 @@ interface StudentAction {
   color: string;
   categoria: string;
   icono?: string;
+  valores?: string[]; // Valores posibles que puede tomar la acción
 }
 
 interface StudentActionLog {
@@ -61,6 +62,7 @@ interface StudentActionLog {
   };
   fechaAccion: string;
   comentarios?: string;
+  valor?: string; // Valor seleccionado de la acción (ej: "1 vez", "2 veces")
   imagenes: string[];
   estado: 'registrado' | 'confirmado' | 'rechazado';
 }
@@ -83,20 +85,20 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
   );
   
   const [actions, setActions] = useState<StudentAction[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [selectedAction, setSelectedAction] = useState<StudentAction | null>(null);
+  
+  // Nuevos estados para selección múltiple
+  // Estructura: { actionId: { action: StudentAction, selectedValues: string[] } }
+  const [selectedActions, setSelectedActions] = useState<{ [key: string]: { action: StudentAction; selectedValues: string[] } }>({});
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]); // Array de IDs de estudiantes
+  
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDateString, setSelectedDateString] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState<string>(new Date().toTimeString().slice(0, 5));
   const [comments, setComments] = useState<string>('');
-  const [showModal, setShowModal] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [showActionPicker, setShowActionPicker] = useState(false);
+  const [showCommentModal, setShowCommentModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingActions, setLoadingActions] = useState(false);
   const [actionsError, setActionsError] = useState<string | null>(null);
-  const [actionLogs, setActionLogs] = useState<StudentActionLog[]>([]);
   
   // Estados para el calendario y visualización
   const [currentWeek, setCurrentWeek] = useState(new Date());
@@ -121,11 +123,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
     loadCalendarActions();
   }, [currentWeek, activeAssociation, students.length]);
 
-  useEffect(() => {
-    if (selectedStudent && showModal) {
-      loadStudentActions();
-    }
-  }, [selectedStudent, selectedDateString]);
+  // Este useEffect ya no es necesario con el nuevo flujo de selección múltiple
 
   const loadActions = async () => {
     try {
@@ -149,8 +147,17 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
         _id: a._id,
         nombre: a.nombre,
         descripcion: a.descripcion,
-        color: a.color
+        color: a.color,
+        valores: a.valores,
+        tieneValores: !!(a.valores && a.valores.length > 0)
       })));
+      
+      // Verificar si hay acciones con valores
+      const accionesConValores = acciones.filter((a: StudentAction) => a.valores && a.valores.length > 0);
+      console.log('✅ [ACTIONS] Acciones con valores:', accionesConValores.length);
+      if (accionesConValores.length > 0) {
+        console.log('✅ [ACTIONS] Ejemplo de valores:', accionesConValores[0].valores);
+      }
       
       if (acciones.length === 0) {
         console.log('⚠️ [ACTIONS] No hay acciones configuradas para esta división');
@@ -176,16 +183,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
     }
   };
 
-  const loadStudentActions = async () => {
-    try {
-      if (!selectedStudent) return;
-      
-      const response = await apiClient.get(`/student-actions/log/student/${selectedStudent._id}?fecha=${selectedDateString}`);
-      setActionLogs(response.data.data || []);
-    } catch (error) {
-      console.error('Error cargando acciones del estudiante:', error);
-    }
-  };
+  // Esta función ya no se necesita con el nuevo flujo de selección múltiple
 
   const getWeekStart = (date: Date) => {
     const start = new Date(date);
@@ -320,82 +318,183 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
     setViewingDayActions(filteredActions);
   };
 
-  const handleStudentPress = (student: Student) => {
-    // Solo permitir registrar acciones si el usuario es coordinador
-    if (!canRegisterActions()) {
-      return;
-    }
-    setSelectedStudent(student);
-    setSelectedAction(null);
-    setSelectedDate(new Date());
-    setSelectedDateString(new Date().toISOString().split('T')[0]);
-    setSelectedTime(new Date().toTimeString().slice(0, 5));
-    setComments('');
-    setShowModal(true);
+  // Toggle selección de estudiante
+  const handleStudentToggle = (studentId: string) => {
+    setSelectedStudents(prev => {
+      if (prev.includes(studentId)) {
+        return prev.filter(id => id !== studentId);
+      } else {
+        return [...prev, studentId];
+      }
+    });
   };
-
-  const handleDateSelect = (date: Date) => {
-    setSelectedDate(date);
-    setSelectedDateString(date.toISOString().split('T')[0]);
-    setShowDatePicker(false);
-    // Reabrir el modal principal después de seleccionar la fecha
-    setTimeout(() => {
-      setShowModal(true);
-    }, 300);
-    if (selectedStudent) {
-      loadStudentActions();
+  
+  // Seleccionar/deseleccionar todos los estudiantes
+  const handleSelectAllStudents = () => {
+    const allSelected = selectedStudents.length === students.length;
+    if (allSelected) {
+      // Deseleccionar todos
+      setSelectedStudents([]);
+    } else {
+      // Seleccionar todos
+      setSelectedStudents(students.map(s => s._id));
     }
   };
-
-  const generateTimeOptions = () => {
-    const options = [];
-    for (let hour = 0; hour < 24; hour++) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        options.push({ value: timeString, label: timeString });
+  
+  // Toggle selección de acción
+  const handleActionToggle = (action: StudentAction) => {
+    setSelectedActions(prev => {
+      const actionId = action._id;
+      if (prev[actionId]) {
+        // Si ya está seleccionada, eliminarla
+        const newState = { ...prev };
+        delete newState[actionId];
+        return newState;
+      } else {
+        // Si no está seleccionada, agregarla con valores vacíos
+        return {
+          ...prev,
+          [actionId]: {
+            action,
+            selectedValues: []
+          }
+        };
+      }
+    });
+  };
+  
+  // Seleccionar una sola opción para una acción (reemplaza la anterior si existe)
+  const handleValueToggle = (actionId: string, value: string) => {
+    setSelectedActions(prev => {
+      const actionData = prev[actionId];
+      if (!actionData) return prev;
+      
+      const currentValues = actionData.selectedValues;
+      // Si ya está seleccionada, deseleccionarla. Si no, seleccionarla (reemplazando la anterior)
+      const newValues = currentValues.includes(value)
+        ? [] // Deseleccionar si ya estaba seleccionada
+        : [value]; // Seleccionar solo esta opción (reemplaza cualquier otra)
+      
+      return {
+        ...prev,
+        [actionId]: {
+          ...actionData,
+          selectedValues: newValues
+        }
+      };
+    });
+  };
+  
+  // Verificar si se puede guardar (tiene acciones con valores y estudiantes)
+  const canSave = () => {
+    const hasActions = Object.keys(selectedActions).length > 0;
+    const hasStudents = selectedStudents.length > 0;
+    
+    if (!hasActions || !hasStudents) return false;
+    
+    // Verificar que todas las acciones seleccionadas tengan exactamente un valor (si tienen valores configurados)
+    for (const actionId in selectedActions) {
+      const actionData = selectedActions[actionId];
+      const action = actionData.action;
+      
+      // Si la acción tiene valores configurados, debe tener exactamente uno seleccionado
+      if (action.valores && action.valores.length > 0) {
+        if (actionData.selectedValues.length !== 1) {
+          return false;
+        }
       }
     }
-    return options;
+    
+    return true;
   };
-
-  const handleRegisterAction = async () => {
-    if (!selectedStudent || !selectedAction) {
-      Alert.alert('Error', 'Por favor selecciona una acción');
+  
+  // Abrir modal de comentario y guardar
+  const handleSavePress = () => {
+    if (!canSave()) {
+      Alert.alert('Error', 'Por favor selecciona al menos una acción con sus opciones y al menos un estudiante');
       return;
     }
-
+    setShowCommentModal(true);
+  };
+  
+  // Guardar todas las acciones
+  const handleFinalSave = async () => {
+    if (!canSave()) {
+      return;
+    }
+    
     try {
       setLoading(true);
       
       const fechaAccion = new Date(`${selectedDateString}T${selectedTime}:00`);
+      const fechaAccionISO = fechaAccion.toISOString();
       
-      const response = await apiClient.post('/student-actions/log', {
-        estudiante: selectedStudent._id,
-        accion: selectedAction._id,
-        comentarios: comments,
-        fechaAccion: fechaAccion.toISOString(),
-        imagenes: []
-      });
-
-      if (response.data.success) {
-        Alert.alert('Éxito', 'Acción registrada correctamente');
-        setShowModal(false);
-        setSelectedStudent(null);
-        setSelectedAction(null);
-        setComments('');
-        loadStudentActions();
-        // Recargar calendario para actualizar indicadores
-        loadCalendarActions();
-      } else {
-        Alert.alert('Error', response.data.message || 'Error al registrar la acción');
+      // Crear todas las combinaciones: cada acción con cada valor para cada estudiante
+      const promises: Promise<any>[] = [];
+      
+      for (const studentId of selectedStudents) {
+        for (const actionId in selectedActions) {
+          const actionData = selectedActions[actionId];
+          const action = actionData.action;
+          
+          // Si la acción tiene valores configurados, usar el valor seleccionado (solo uno)
+          if (action.valores && action.valores.length > 0 && actionData.selectedValues.length === 1) {
+            const valor = actionData.selectedValues[0];
+            promises.push(
+              apiClient.post('/student-actions/log', {
+                estudiante: studentId,
+                accion: actionId,
+                valor: valor,
+                comentarios: comments,
+                fechaAccion: fechaAccionISO,
+                imagenes: []
+              })
+            );
+          } else {
+            // Si no tiene valores o no se seleccionó ninguno, crear un log sin valor
+            promises.push(
+              apiClient.post('/student-actions/log', {
+                estudiante: studentId,
+                accion: actionId,
+                comentarios: comments,
+                fechaAccion: fechaAccionISO,
+                imagenes: []
+              })
+            );
+          }
+        }
       }
+      
+      // Ejecutar todas las peticiones
+      await Promise.all(promises);
+      
+      Alert.alert('Éxito', `${promises.length} acción(es) registrada(s) correctamente`);
+      
+      // Limpiar selecciones
+      setSelectedActions({});
+      setSelectedStudents([]);
+      setComments('');
+      setShowCommentModal(false);
+      
+      // Recargar calendario
+      loadCalendarActions();
     } catch (error: any) {
-      console.error('Error registrando acción:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Error al registrar la acción');
+      console.error('Error registrando acciones:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Error al registrar las acciones');
     } finally {
       setLoading(false);
     }
   };
+
+  // Función para cambiar la fecha si es necesario en el futuro
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    setSelectedDateString(date.toISOString().split('T')[0]);
+  };
+
+  // Función generateTimeOptions eliminada - ya no se usa en el nuevo flujo
+
+  // Esta función ha sido reemplazada por handleFinalSave para el nuevo flujo de selección múltiple
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('es-ES', {
@@ -468,7 +567,14 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
     <View style={[styles.actionLogItem, { borderLeftColor: item.accion.color }]}>
       <View style={styles.actionLogHeader}>
         <View style={styles.actionLogTitleContainer}>
-          <Text style={styles.actionLogName}>{item.accion.nombre}</Text>
+          <View style={styles.actionLogNameContainer}>
+            <Text style={styles.actionLogName}>{item.accion.nombre}</Text>
+            {item.valor && (
+              <Text style={[styles.actionLogValue, { color: item.accion.color }]}>
+                {item.valor}
+              </Text>
+            )}
+          </View>
           <Text style={styles.actionLogTime}>
             {new Date(item.fechaAccion).toLocaleTimeString('es-ES', { 
               hour: '2-digit', 
@@ -617,9 +723,116 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
           </View>
         ) : null}
 
+        {/* 2. SECCIÓN DE ACCIONES CON OPCIONES */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Seleccionar Acciones</Text>
+          {loadingActions ? (
+            <ActivityIndicator size="large" color="#0E5FCE" style={styles.loader} />
+          ) : actionsError ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>Error: {actionsError}</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={loadActions}
+              >
+                <Text style={styles.retryButtonText}>Reintentar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : actions.length === 0 ? (
+            <Text style={styles.emptyText}>No hay acciones configuradas para esta división</Text>
+          ) : (
+            <View style={styles.actionsList}>
+              {actions.map((action) => {
+                const isActionSelected = !!selectedActions[action._id];
+                const actionData = selectedActions[action._id];
+                
+                return (
+                  <View key={action._id} style={styles.actionCard}>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionHeader,
+                        isActionSelected && { backgroundColor: action.color + '20' }
+                      ]}
+                      onPress={() => handleActionToggle(action)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.actionHeaderLeft}>
+                        <View style={[styles.actionCheckbox, isActionSelected && styles.actionCheckboxSelected]}>
+                          {isActionSelected && <Text style={styles.actionCheckmark}>✓</Text>}
+                        </View>
+                        <View style={[styles.actionColorIndicator, { backgroundColor: action.color }]} />
+                        <Text style={styles.actionName}>{action.nombre}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    
+                    {/* Mostrar opciones si la acción tiene valores configurados */}
+                    {action.valores && action.valores.length > 0 && (
+                      <View style={[
+                        styles.actionValuesContainer,
+                        !isActionSelected && styles.actionValuesContainerDisabled
+                      ]}>
+                        <Text style={styles.actionValuesTitle}>
+                          {isActionSelected ? 'Selecciona opciones:' : 'Opciones disponibles:'}
+                        </Text>
+                        <View style={styles.actionValuesGrid}>
+                          {action.valores.map((valor) => {
+                            const isValueSelected = actionData?.selectedValues.includes(valor);
+                            return (
+                              <TouchableOpacity
+                                key={valor}
+                                style={[
+                                  styles.valueChip,
+                                  isValueSelected && { backgroundColor: action.color, borderColor: action.color },
+                                  !isActionSelected && styles.valueChipDisabled
+                                ]}
+                                onPress={() => {
+                                  if (isActionSelected) {
+                                    handleValueToggle(action._id, valor);
+                                  } else {
+                                    // Si la acción no está seleccionada, seleccionarla primero
+                                    handleActionToggle(action);
+                                    setTimeout(() => handleValueToggle(action._id, valor), 100);
+                                  }
+                                }}
+                                activeOpacity={0.7}
+                                disabled={!isActionSelected && false}
+                              >
+                                <Text style={[
+                                  styles.valueChipText,
+                                  isValueSelected && styles.valueChipTextSelected,
+                                  !isActionSelected && styles.valueChipTextDisabled
+                                ]}>
+                                  {valor}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
         {/* 3. LISTA DE ESTUDIANTES */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Seleccionar Alumno</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Seleccionar Estudiantes</Text>
+            {students.length > 0 && (
+              <TouchableOpacity
+                style={styles.selectAllButton}
+                onPress={handleSelectAllStudents}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.selectAllButtonText}>
+                  {selectedStudents.length === students.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {studentsLoading && students.length === 0 ? (
             <ActivityIndicator size="large" color="#0E5FCE" style={styles.loader} />
           ) : studentsError ? (
@@ -636,227 +849,102 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
             <Text style={styles.emptyText}>No hay alumnos disponibles en esta división</Text>
           ) : (
               <View style={styles.studentsGrid}>
-                {students.map((student) => (
-                  <TouchableOpacity
-                    key={student._id}
-                    style={styles.studentItem}
-                    onPress={() => handleStudentPress(student)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.studentAvatar}>
-                      {student.avatar ? (
-                        <Image 
-                          source={{ uri: student.avatar }} 
-                          style={styles.studentAvatarImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <Text style={styles.studentIcon}>👤</Text>
+                {students.map((student) => {
+                  const isSelected = selectedStudents.includes(student._id);
+                  return (
+                    <TouchableOpacity
+                      key={student._id}
+                      style={[
+                        styles.studentItem,
+                        isSelected && styles.studentItemSelected
+                      ]}
+                      onPress={() => handleStudentToggle(student._id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[
+                        styles.studentAvatar,
+                        isSelected && styles.studentAvatarSelected
+                      ]}>
+                        {student.avatar ? (
+                          <Image 
+                            source={{ uri: student.avatar }} 
+                            style={styles.studentAvatarImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.studentIcon}>👤</Text>
+                        )}
+                        {isSelected && (
+                          <View style={styles.studentCheckmark} pointerEvents="none">
+                            <Text style={styles.studentCheckmarkText}>✓</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.studentNombre}>{student.nombre}</Text>
+                      <Text style={styles.studentApellido}>{student.apellido}</Text>
+                      {student.division?.nombre && (
+                        <Text style={styles.studentDivision}>{student.division.nombre}</Text>
                       )}
-                    </View>
-                    <Text style={styles.studentNombre}>{student.nombre}</Text>
-                    <Text style={styles.studentApellido}>{student.apellido}</Text>
-                    {student.division?.nombre && (
-                      <Text style={styles.studentDivision}>{student.division.nombre}</Text>
-                    )}
-                  </TouchableOpacity>
-                ))}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
+        
+        {/* Botón de guardar */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              !canSave() && styles.saveButtonDisabled
+            ]}
+            onPress={handleSavePress}
+            disabled={!canSave()}
+          >
+            <Text style={styles.saveButtonText}>
+              Guardar ({Object.keys(selectedActions).length} acción(es), {selectedStudents.length} estudiante(s))
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
-      {/* Modal para registrar acción */}
+      {/* Modal para comentario antes de guardar */}
       <Modal
-        visible={showModal}
+        visible={showCommentModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => setShowCommentModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Registrar Acción</Text>
+              <Text style={styles.modalTitle}>Agregar Comentario</Text>
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={() => setShowModal(false)}
+                onPress={() => setShowCommentModal(false)}
               >
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView 
-              style={styles.modalScrollView} 
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled={true}
-            >
-              {/* Estudiante seleccionado */}
-              <View style={styles.modalField}>
-                <Text style={styles.modalLabel}>Estudiante:</Text>
-                <View style={styles.studentInfoContainer}>
-                  {selectedStudent?.avatar ? (
-                    <Image 
-                      source={{ uri: selectedStudent.avatar }} 
-                      style={styles.modalStudentAvatar}
-                    />
-                  ) : (
-                    <View style={[styles.modalStudentAvatar, styles.modalStudentAvatarPlaceholder]}>
-                      <Text style={styles.modalStudentAvatarText}>
-                        {selectedStudent?.nombre?.charAt(0)?.toUpperCase() || '👤'}
-                      </Text>
-                    </View>
-                  )}
-                  <Text style={styles.modalValue}>
-                    {selectedStudent?.nombre} {selectedStudent?.apellido}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Selector de acción */}
-              <View style={styles.modalField}>
-                <Text style={styles.modalLabel}>Acción:</Text>
-                {loadingActions ? (
-                  <View style={styles.loadingActionsContainer}>
-                    <ActivityIndicator size="small" color="#0E5FCE" />
-                    <Text style={styles.loadingActionsText}>Cargando acciones...</Text>
-                  </View>
-                ) : actionsError ? (
-                  <View style={styles.errorActionsContainer}>
-                    <Text style={styles.errorActionsText}>Error: {actionsError}</Text>
-                    <TouchableOpacity 
-                      style={styles.retryActionsButton}
-                      onPress={loadActions}
-                    >
-                      <Text style={styles.retryActionsButtonText}>Reintentar</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : actions.length === 0 ? (
-                  <View style={styles.emptyActionsContainer}>
-                    <Text style={styles.emptyActionsText}>
-                      No hay acciones configuradas para esta división
-                    </Text>
-                    <Text style={styles.emptyActionsHint}>
-                      Contacta al administrador para configurar las acciones
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.dateTimeButton}
-                      onPress={() => {
-                        console.log('🎯 [ACTION PICKER] Abriendo selector de acciones. Total acciones:', actions.length);
-                        console.log('🎯 [ACTION PICKER] Acciones disponibles:', actions.map((a: StudentAction) => a.nombre));
-                        // Cerrar el modal principal temporalmente para que funcione el picker
-                        setShowModal(false);
-                        setTimeout(() => {
-                          setShowActionPicker(true);
-                        }, 300);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.dateTimeButtonText}>
-                        {selectedAction ? selectedAction.nombre : 'Seleccionar acción...'}
-                      </Text>
-                      <Text style={styles.dateTimeButtonIcon}>📋</Text>
-                    </TouchableOpacity>
-                    {selectedAction && (
-                      <View style={[styles.actionPreview, { borderLeftColor: selectedAction.color || '#0E5FCE' }]}>
-                        <Text style={[styles.actionPreviewName, { color: selectedAction.color || '#0E5FCE' }]}>
-                          {selectedAction.nombre}
-                        </Text>
-                        {selectedAction.descripcion && (
-                          <Text style={styles.actionPreviewDesc}>{selectedAction.descripcion}</Text>
-                        )}
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-
-              {/* Selector de fecha */}
-              <View style={styles.modalField}>
-                <Text style={styles.modalLabel}>Fecha:</Text>
-                <TouchableOpacity
-                  style={styles.dateTimeButton}
-                  onPress={() => {
-                    console.log('📅 [DATE PICKER] Botón de fecha presionado');
-                    // Cerrar el modal principal temporalmente para que funcione el picker
-                    setShowModal(false);
-                    setTimeout(() => {
-                      setShowDatePicker(true);
-                    }, 300);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.dateTimeButtonText}>
-                    {formatDate(selectedDate)}
-                  </Text>
-                  <Text style={styles.dateTimeButtonIcon}>📅</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Selector de hora */}
-              <View style={styles.modalField}>
-                <Text style={styles.modalLabel}>Hora:</Text>
-                <TouchableOpacity
-                  style={styles.dateTimeButton}
-                  onPress={() => {
-                    console.log('🕐 [TIME PICKER] Botón de hora presionado');
-                    // Cerrar el modal principal temporalmente para que funcione el picker
-                    setShowModal(false);
-                    setTimeout(() => {
-                      setShowTimePicker(true);
-                    }, 300);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.dateTimeButtonText}>{selectedTime}</Text>
-                  <Text style={styles.dateTimeButtonIcon}>🕐</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Comentarios */}
-              <View style={styles.modalField}>
-                <Text style={styles.modalLabel}>Comentarios (opcional):</Text>
-                <TextInput
-                  style={[styles.modalInput, styles.commentsInput]}
-                  value={comments}
-                  onChangeText={setComments}
-                  placeholder="Comentarios adicionales..."
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-              </View>
-
-              {/* Historial de acciones del estudiante */}
-              {selectedStudent && actionLogs.length > 0 && (
-                <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>Historial reciente:</Text>
-                  <View style={styles.actionLogsContainer}>
-                    {actionLogs.slice(0, 3).map((log) => (
-                      <View key={log._id} style={[styles.actionLogPreview, { borderLeftColor: log.accion.color }]}>
-                        <Text style={styles.actionLogPreviewName}>{log.accion.nombre}</Text>
-                        <Text style={styles.actionLogPreviewTime}>
-                          {new Date(log.fechaAccion).toLocaleDateString('es-ES', { 
-                            day: '2-digit', 
-                            month: '2-digit'
-                          })} {new Date(log.fechaAccion).toLocaleTimeString('es-ES', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </ScrollView>
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Comentarios (opcional):</Text>
+              <TextInput
+                style={[styles.modalInput, styles.commentsInput]}
+                value={comments}
+                onChangeText={setComments}
+                placeholder="Comentarios adicionales..."
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            </View>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={() => setShowModal(false)}
+                onPress={() => setShowCommentModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
@@ -864,15 +952,15 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
               <TouchableOpacity
                 style={[
                   styles.confirmButton,
-                  (!selectedAction || loading) && styles.disabledButton
+                  loading && styles.disabledButton
                 ]}
-                onPress={handleRegisterAction}
-                disabled={!selectedAction || loading}
+                onPress={handleFinalSave}
+                disabled={loading}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.confirmButtonText}>Registrar</Text>
+                  <Text style={styles.confirmButtonText}>Guardar</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -880,178 +968,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
         </View>
       </Modal>
 
-      {/* Modal de calendario - Fuera del modal principal */}
-      <Modal
-        visible={showDatePicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          console.log('📅 [DATE PICKER] Cerrando modal de fecha');
-          setShowDatePicker(false);
-        }}
-        presentationStyle="overFullScreen"
-      >
-        <View style={styles.pickerOverlay}>
-          <TouchableOpacity 
-            style={styles.pickerOverlayTouchable}
-            activeOpacity={1}
-            onPress={() => {
-              console.log('📅 [DATE PICKER] Overlay tocado, cerrando');
-              setShowDatePicker(false);
-            }}
-          />
-          <View style={styles.pickerModalContent}>
-            <CustomCalendar
-              onDateSelect={(date) => {
-                console.log('📅 [DATE PICKER] Fecha seleccionada:', date);
-                handleDateSelect(date);
-              }}
-              onClose={() => {
-                console.log('📅 [DATE PICKER] Cerrando desde CustomCalendar');
-                setShowDatePicker(false);
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de selector de acción - Fuera del modal principal */}
-      <Modal
-        visible={showActionPicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          console.log('📋 [ACTION PICKER] Cerrando modal de acción');
-          setShowActionPicker(false);
-          setTimeout(() => {
-            setShowModal(true);
-          }, 300);
-        }}
-        presentationStyle="overFullScreen"
-      >
-        <View style={styles.pickerOverlay}>
-          <TouchableOpacity 
-            style={styles.pickerOverlayTouchable}
-            activeOpacity={1}
-            onPress={() => {
-              console.log('📋 [ACTION PICKER] Overlay tocado, cerrando');
-              setShowActionPicker(false);
-              setTimeout(() => {
-                setShowModal(true);
-              }, 300);
-            }}
-          />
-          <View style={styles.pickerContainerModal}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Seleccionar Acción</Text>
-              <TouchableOpacity onPress={() => {
-                console.log('📋 [ACTION PICKER] Botón X presionado');
-                setShowActionPicker(false);
-                setTimeout(() => {
-                  setShowModal(true);
-                }, 300);
-              }}>
-                <Text style={styles.pickerCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <Picker
-              selectedValue={selectedAction?._id || ''}
-              onValueChange={(itemValue) => {
-                console.log('📋 [ACTION PICKER] Acción seleccionada:', itemValue);
-                const action = actions.find(a => a._id === itemValue);
-                setSelectedAction(action || null);
-                console.log('📋 [ACTION PICKER] Acción establecida:', action?.nombre);
-              }}
-              style={styles.timePicker}
-            >
-              <Picker.Item label="Seleccionar acción..." value="" />
-              {actions.map((action) => (
-                <Picker.Item
-                  key={action._id}
-                  label={action.nombre}
-                  value={action._id}
-                />
-              ))}
-            </Picker>
-            <TouchableOpacity
-              style={styles.pickerConfirmButton}
-              onPress={() => {
-                console.log('📋 [ACTION PICKER] Botón confirmar presionado');
-                setShowActionPicker(false);
-                setTimeout(() => {
-                  setShowModal(true);
-                }, 300);
-              }}
-            >
-              <Text style={styles.pickerConfirmText}>Confirmar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de hora - Fuera del modal principal */}
-      <Modal
-        visible={showTimePicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          console.log('🕐 [TIME PICKER] Cerrando modal de hora');
-          setShowTimePicker(false);
-        }}
-        presentationStyle="overFullScreen"
-      >
-        <View style={styles.pickerOverlay}>
-          <TouchableOpacity 
-            style={styles.pickerOverlayTouchable}
-            activeOpacity={1}
-            onPress={() => {
-              console.log('🕐 [TIME PICKER] Overlay tocado, cerrando');
-              setShowTimePicker(false);
-            }}
-          />
-          <View style={styles.pickerContainerModal}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Seleccionar Hora</Text>
-              <TouchableOpacity onPress={() => {
-                console.log('🕐 [TIME PICKER] Botón X presionado');
-                setShowTimePicker(false);
-              }}>
-                <Text style={styles.pickerCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <Picker
-              selectedValue={selectedTime}
-              onValueChange={(itemValue) => {
-                console.log('🕐 [TIME PICKER] Hora seleccionada:', itemValue);
-                setSelectedTime(itemValue);
-                // No cerrar automáticamente, dejar que el usuario confirme
-              }}
-              style={styles.timePicker}
-            >
-              {generateTimeOptions().map((option) => (
-                <Picker.Item
-                  key={option.value}
-                  label={option.label}
-                  value={option.value}
-                />
-              ))}
-            </Picker>
-            <TouchableOpacity
-              style={styles.pickerConfirmButton}
-              onPress={() => {
-                console.log('🕐 [TIME PICKER] Botón confirmar presionado');
-                setShowTimePicker(false);
-                // Reabrir el modal principal después de confirmar la hora
-                setTimeout(() => {
-                  setShowModal(true);
-                }, 300);
-              }}
-            >
-              <Text style={styles.pickerConfirmText}>Confirmar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Modales obsoletos eliminados - ya no se usan en el nuevo flujo de selección múltiple */}
     </View>
   );
 };
@@ -1141,49 +1058,55 @@ const styles = StyleSheet.create({
   studentsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-start',
     paddingHorizontal: 10,
   },
   studentItem: {
-    width: '22%',
+    width: '25%',
     alignItems: 'center',
-    marginBottom: 20,
-    padding: 4,
+    marginBottom: 16,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   studentAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: '#E0E0E0',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
     position: 'relative',
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   studentAvatarImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
   },
   studentIcon: {
-    fontSize: 30,
+    fontSize: 35,
   },
   studentNombre: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#333',
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
   studentApellido: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: '#666',
     textAlign: 'center',
   },
   studentDivision: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#999',
     textAlign: 'center',
     marginTop: 2,
@@ -1214,10 +1137,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  actionLogNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    flex: 1,
+  },
   actionLogName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+    marginRight: 8,
+  },
+  actionLogValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   actionLogTime: {
     fontSize: 12,
@@ -1265,14 +1200,20 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
+    paddingTop: 50,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     maxHeight: '90%',
     paddingTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1449,6 +1390,12 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     backgroundColor: '#FFFFFF',
+  },
+  modalHint: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   commentsInput: {
     height: 80,
@@ -1704,6 +1651,195 @@ const styles = StyleSheet.create({
   },
   dayActionsList: {
     maxHeight: 400,
+  },
+  // Estilos para acciones y opciones (tipo formulario)
+  actionsList: {
+    marginTop: 8,
+  },
+  actionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  actionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  actionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  actionCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#D0D0D0',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  actionCheckboxSelected: {
+    backgroundColor: '#0E5FCE',
+    borderColor: '#0E5FCE',
+  },
+  actionCheckmark: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  actionColorIndicator: {
+    width: 4,
+    height: 24,
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  actionName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  actionValuesContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 8,
+    backgroundColor: '#F8F9FA',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  actionValuesContainerDisabled: {
+    opacity: 0.6,
+  },
+  actionValuesTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  actionValuesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  valueChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#D0D0D0',
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+    marginBottom: 8,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  valueChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  valueChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  valueChipDisabled: {
+    opacity: 0.5,
+  },
+  valueChipTextDisabled: {
+    color: '#999',
+  },
+  studentItemSelected: {
+    borderWidth: 2,
+    borderColor: '#0E5FCE',
+    backgroundColor: '#E3F2FD',
+  },
+  studentAvatarSelected: {
+    borderWidth: 3,
+    borderColor: '#0E5FCE',
+  },
+  studentCheckmark: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#0E5FCE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 10,
+    zIndex: 10,
+  },
+  studentCheckmarkText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    lineHeight: 14,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  selectAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F0F8FF',
+    borderWidth: 1,
+    borderColor: '#0E5FCE',
+  },
+  selectAllButtonText: {
+    color: '#0E5FCE',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#0E5FCE',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

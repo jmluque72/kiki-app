@@ -22,9 +22,10 @@ interface CommonHeaderProps {
     avatar?: string;
   } | null;
   onOpenActiveAssociation?: () => void;
+  noTopPadding?: boolean;
 }
 
-const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpenMenu, showMenuButton = false, activeStudent, onOpenActiveAssociation }) => {
+const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpenMenu, showMenuButton = false, activeStudent, onOpenActiveAssociation, noTopPadding = false }) => {
   const { selectedInstitution, userAssociations, getActiveInstitution, getActiveStudent } = useInstitution();
   
   // Verificación de seguridad para useAuth
@@ -145,9 +146,9 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
   return (
     <>
       {/* Header personalizado */}
-      <View style={styles.homeHeader}>
+      <View style={noTopPadding ? styles.homeHeaderNoPadding : styles.homeHeader}>
         {onOpenMenu && (
-          <TouchableOpacity style={styles.menuIcon} onPress={onOpenMenu}>
+          <TouchableOpacity style={noTopPadding ? [styles.menuIcon, styles.menuIconNoPadding] : styles.menuIcon} onPress={onOpenMenu}>
             <Text style={styles.menuIconText}>☰</Text>
           </TouchableOpacity>
         )}
@@ -156,7 +157,7 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
           style={styles.headerLogo}
           resizeMode="contain"
         />
-        <TouchableOpacity style={styles.messageIcon} onPress={onOpenNotifications}>
+        <TouchableOpacity style={noTopPadding ? [styles.messageIcon, styles.messageIconNoPadding] : styles.messageIcon} onPress={onOpenNotifications}>
           <Image
             source={require('../assets/design/icons/email.png')}
             style={[styles.messageIconImage, {}]}
@@ -179,7 +180,7 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({ onOpenNotifications, onOpen
       </View>
 
       {/* Sección azul dividida en 3 partes */}
-      <View style={styles.greetingSection}>
+      <View style={noTopPadding ? styles.greetingSectionNoPadding : styles.greetingSection}>
         {/* Nombre del Estudiante/Coordinador y Rol */}
         <View style={styles.sectionPart}>
           {(() => {
@@ -382,38 +383,63 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     elevation: 5,
   },
+  homeHeaderNoPadding: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 0,
+    paddingBottom: 0,
+    backgroundColor: '#FFFFFF',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    elevation: 5,
+  },
   headerLogo: {
     width: 120,
     height: 45,
   },
   messageIcon: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
     right: 20,
     top: 60,
+    opacity: 0.7,
+  },
+  messageIconNoPadding: {
+    top: 10,
   },
   messageIconImage: {
-    width: 32,
-    height: 32
+    width: 24,
+    height: 24,
+    opacity: 0.8,
   },
   menuIcon: {
-    width: 60,
-    height: 60,
+    width: 44,
+    height: 44,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
     left: 10,
     top: 50,
+    opacity: 0.7,
+  },
+  menuIconNoPadding: {
+    top: 10,
   },
   menuIconText: {
-    fontSize: 38,
+    fontSize: 28,
     color: '#0E5FCE',
-    fontWeight: '900',
+    fontWeight: '600',
+    opacity: 0.8,
   },
 
   greetingSection: {
@@ -425,6 +451,16 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     marginHorizontal: 0,
     marginTop: 60, // Reducido para que esté completamente pegado al header
+  },
+  greetingSectionNoPadding: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0E5FCE',
+    paddingHorizontal: 0,
+    paddingVertical: 15,
+    marginHorizontal: 0,
+    marginTop: 0,
   },
   sectionPart: {
     flex: 1,

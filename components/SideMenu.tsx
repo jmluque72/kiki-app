@@ -24,6 +24,7 @@ interface SideMenuProps {
   onOpenAcciones?: () => void;
   onOpenRetirar?: () => void;
   onOpenFormularios?: () => void;
+  onOpenPerfil?: () => void;
   pendingFormsCount?: number;
   // Nueva prop para abrir formularios directamente
   openFormularios?: () => void;
@@ -41,6 +42,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
   onOpenAcciones, 
   onOpenRetirar, 
   onOpenFormularios,
+  onOpenPerfil,
   openFormularios,
   pendingFormsCount = 0 
 }) => {
@@ -126,6 +128,8 @@ const SideMenu: React.FC<SideMenuProps> = ({
       id: 'associations',
       title: 'Asociaciones',
       onPress: () => {
+        console.log('🔍 [SideMenu] Asociaciones onPress ejecutado');
+        console.log('🔍 [SideMenu] onOpenAssociations existe?', !!onOpenAssociations);
         onClose();
         onOpenAssociations?.();
       }
@@ -151,7 +155,14 @@ const SideMenu: React.FC<SideMenuProps> = ({
       
       {/* Header del menú */}
       <View style={styles.header}>
-        <View style={styles.userInfo}>
+        <TouchableOpacity 
+          style={styles.userInfo}
+          onPress={() => {
+            onClose();
+            onOpenPerfil?.();
+          }}
+          activeOpacity={0.7}
+        >
           {/* Avatar del usuario */}
           {user?.avatar ? (
             <Image 
@@ -174,7 +185,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
               </Text>
             )}
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Lista de opciones del menú */}

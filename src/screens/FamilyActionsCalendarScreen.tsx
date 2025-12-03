@@ -43,6 +43,7 @@ interface StudentActionLog {
   };
   fechaAccion: string;
   comentarios?: string;
+  valor?: string; // Valor seleccionado de la acción (ej: "1 vez", "2 veces")
   imagenes: string[];
   estado: 'registrado' | 'confirmado' | 'rechazado';
 }
@@ -130,6 +131,10 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
           `/student-actions/log/student/${student._id}?fechaInicio=${startDateStr}&fechaFin=${endDateStr}`
         ).catch(err => {
           console.error(`❌ [FAMILY ACTIONS] Error cargando acciones para estudiante ${student._id}:`, err);
+          // Si es un error 403, puede ser un problema de permisos, pero no queremos romper la UI
+          if (err.response?.status === 403) {
+            console.warn(`⚠️ [FAMILY ACTIONS] Acceso denegado para estudiante ${student._id}. Verificar asociación.`);
+          }
           return { data: { data: [] } };
         })
       );
@@ -162,6 +167,10 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
           `/student-actions/log/student/${student._id}?fechaInicio=${selectedDate}&fechaFin=${selectedDate}`
         ).catch(err => {
           console.error(`❌ [FAMILY ACTIONS] Error cargando acciones del día para estudiante ${student._id}:`, err);
+          // Si es un error 403, puede ser un problema de permisos, pero no queremos romper la UI
+          if (err.response?.status === 403) {
+            console.warn(`⚠️ [FAMILY ACTIONS] Acceso denegado para estudiante ${student._id}. Verificar asociación.`);
+          }
           return { data: { data: [] } };
         })
       );
@@ -265,7 +274,14 @@ const FamilyActionsCalendarScreen: React.FC<FamilyActionsCalendarScreenProps> = 
   const renderDayAction = ({ item }: { item: StudentActionLog }) => (
     <View style={[styles.actionItem, { borderLeftColor: item.accion.color }]}>
       <View style={styles.actionHeader}>
-        <Text style={styles.actionName}>{item.accion.nombre}</Text>
+        <View style={styles.actionTitleContainer}>
+          <Text style={styles.actionName}>{item.accion.nombre}</Text>
+          {item.valor && (
+            <Text style={[styles.actionValue, { color: item.accion.color }]}>
+              {item.valor}
+            </Text>
+          )}
+        </View>
         <Text style={styles.actionTime}>
           {new Date(item.fechaAccion).toLocaleTimeString('es-ES', { 
             hour: '2-digit', 
@@ -633,14 +649,25 @@ const styles = StyleSheet.create({
   actionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 4,
+  },
+  actionTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   actionName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    flex: 1,
+    marginRight: 8,
+  },
+  actionValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   actionTime: {
     fontSize: 12,

@@ -64,6 +64,9 @@ const ScreenWithHeader: React.FC<ScreenWithHeaderProps> = ({
                 closeMenu();
                 onOpenActiveAssociation?.();
               }}
+              onOpenPerfil={() => {
+                // No hacer nada aquí, el perfil se maneja desde HomeScreen
+              }}
               openFormularios={() => {
                 closeMenu();
                 setShowFormularios(true);

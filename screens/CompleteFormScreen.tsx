@@ -97,45 +97,191 @@ const CompleteFormScreen: React.FC<CompleteFormScreenProps> = ({ formRequest, on
   };
 
   const uploadFileToS3 = async (fileUri: string, fileName: string, mimeType: string): Promise<string> => {
+    const startTime = Date.now();
+    const uploadUrl = `${API_FULL_URL}/upload/s3/file`;
+    
     try {
-      if (!token) {
-        console.error('❌ [UPLOAD] No hay token disponible');
-        throw new Error('No hay token de autenticación disponible');
-      }
+      console.log('📤 [UPLOAD] Iniciando upload de archivo:', { fileName, mimeType, uri: fileUri.substring(0, 50) + '...' });
       
-      // Configurar el token en apiClient para que el interceptor lo use
-      setAuthToken(token);
+      // Función auxiliar para obtener el token actual
+      const getAuthToken = async (): Promise<string> => {
+        const RefreshTokenService = require('../src/services/refreshTokenService').default;
+        let authToken = token;
+        
+        console.log(`🔑 [UPLOAD] Obteniendo token - token del contexto: ${authToken ? 'Sí' : 'No'}`);
+        
+        if (!authToken) {
+          console.log('🔑 [UPLOAD] Token del contexto no disponible, obteniendo de AsyncStorage...');
+          authToken = await RefreshTokenService.getAccessToken();
+        }
+        
+        if (!authToken) {
+          console.error('❌ [UPLOAD] No hay token disponible ni en contexto ni en AsyncStorage');
+          throw new Error('No hay token de autenticación disponible. Por favor, inicia sesión nuevamente.');
+        }
+        
+        // Verificar si el token está próximo a expirar (5 minutos antes)
+        const isExpiringSoon = await RefreshTokenService.isTokenExpiringSoon();
+        if (isExpiringSoon) {
+          console.log('⚠️ [UPLOAD] Token próximo a expirar, refrescando preventivamente...');
+          try {
+            authToken = await RefreshTokenService.refreshAccessToken();
+            console.log('✅ [UPLOAD] Token refrescado preventivamente');
+          } catch (refreshError: any) {
+            console.warn('⚠️ [UPLOAD] No se pudo refrescar preventivamente, usando token actual:', refreshError?.message);
+            // Continuar con el token actual si el refresh preventivo falla
+          }
+        }
+        
+        console.log(`✅ [UPLOAD] Token obtenido (primeros 20 chars): ${authToken.substring(0, 20)}...`);
+        return authToken;
+      };
       
-      console.log('📤 [UPLOAD] Iniciando upload de archivo:', { fileName, mimeType, tokenLength: token.length });
+      // Función auxiliar para preparar FormData
+      const prepareFormData = () => {
+        const formData = new FormData();
+        
+        // Normalizar URI para Android
+        let normalizedUri = fileUri;
+        if (Platform.OS === 'android') {
+          if (!normalizedUri.startsWith('file://') && !normalizedUri.startsWith('content://')) {
+            normalizedUri = `file://${normalizedUri}`;
+          }
+        }
+        
+        formData.append('file', {
+          uri: normalizedUri,
+          type: mimeType,
+          name: fileName || 'file',
+        } as any);
+        
+        return formData;
+      };
       
-      const formData = new FormData();
-      
-      // Agregar el archivo al FormData
-      formData.append('file', {
-        uri: fileUri,
-        type: mimeType,
-        name: fileName || 'file',
-      } as any);
-
-      console.log('📤 [UPLOAD] FormData creado, enviando petición con apiClient');
-
-      // Usar apiClient en lugar de fetch para que los interceptores manejen el token automáticamente
-      const response = await apiClient.post('/upload/s3/file', formData, {
-        timeout: 30000, // 30 segundos timeout
-      });
-
-      console.log('✅ [UPLOAD] Archivo subido exitosamente:', response.data);
-      return response.data.fileKey; // Retornar la key de S3
-    } catch (error: any) {
-      console.error('❌ [UPLOAD] Error subiendo archivo a S3:', error);
-      if (error.response) {
-        console.error('❌ [UPLOAD] Error response:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: error.response.data
+      // Función auxiliar para hacer la petición con retry en caso de 401
+      const uploadWithRetry = async (retryCount = 0): Promise<Response> => {
+        const authToken = await getAuthToken();
+        
+        console.log(`📤 [UPLOAD] Intentando subir archivo (intento ${retryCount + 1})`);
+        console.log(`📤 [UPLOAD] Token (primeros 20 chars): ${authToken.substring(0, 20)}...`);
+        
+        // Recrear FormData para cada intento, ya que no es reutilizable
+        const formDataToUse = prepareFormData();
+        
+        const fetchResponse = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            // NO incluir Content-Type aquí - React Native lo establecerá automáticamente con multipart/form-data y boundary
+          },
+          body: formDataToUse,
         });
+        
+        // Si recibimos 401 y no hemos reintentado, intentar refresh del token
+        if (fetchResponse.status === 401 && retryCount === 0) {
+          console.log('🔄 [UPLOAD] Token expirado (401), intentando refresh...');
+          const RefreshTokenService = require('../src/services/refreshTokenService').default;
+          
+          try {
+            // Verificar si hay refresh token disponible antes de intentar refresh
+            const refreshToken = await RefreshTokenService.getRefreshToken();
+            if (!refreshToken) {
+              console.error('❌ [UPLOAD] No hay refresh token disponible');
+              throw new Error('No hay refresh token disponible. Por favor, inicia sesión nuevamente.');
+            }
+            
+            console.log('🔄 [UPLOAD] Refresh token encontrado, intentando renovar access token...');
+            const newToken = await RefreshTokenService.refreshAccessToken();
+            
+            if (newToken) {
+              console.log('✅ [UPLOAD] Token renovado exitosamente');
+              console.log('✅ [UPLOAD] Nuevo token (primeros 20 chars):', newToken.substring(0, 20) + '...');
+              
+              // Actualizar el token en AsyncStorage (el contexto lo leerá en el próximo render)
+              // También actualizar el token en apiClient para futuras peticiones
+              setAuthToken(newToken);
+              
+              // Guardar el token en AsyncStorage con la misma key que usa el contexto
+              const AsyncStorage = require('../src/utils/storage').default;
+              await AsyncStorage.setItem('auth_token', newToken);
+              
+              console.log('✅ [UPLOAD] Token actualizado en AsyncStorage y apiClient');
+              
+              // Reintentar con el nuevo token (el FormData se recreará en el retry)
+              return uploadWithRetry(1);
+            } else {
+              throw new Error('No se pudo obtener un nuevo token después del refresh');
+            }
+          } catch (refreshError: any) {
+            console.error('❌ [UPLOAD] Error completo al refrescar token:');
+            console.error('❌ [UPLOAD] Error message:', refreshError?.message);
+            console.error('❌ [UPLOAD] Error name:', refreshError?.name);
+            console.error('❌ [UPLOAD] Error stack:', refreshError?.stack);
+            
+            // Si el error es específico sobre el refresh token, mostrar mensaje más claro
+            if (refreshError?.message?.includes('refresh token') || 
+                refreshError?.message?.includes('No hay refresh token')) {
+              throw new Error('Tu sesión ha expirado completamente. Por favor, inicia sesión nuevamente.');
+            }
+            
+            throw new Error(`Error al renovar la sesión: ${refreshError?.message || 'Error desconocido'}. Por favor, inicia sesión nuevamente.`);
+          }
+        }
+        
+        return fetchResponse;
+      };
+      
+      // En Android, usar fetch directamente (más confiable para FormData)
+      // En iOS, también usar fetch para mantener consistencia
+      if (Platform.OS === 'android' || Platform.OS === 'ios') {
+        const fetchResponse = await uploadWithRetry(0);
+        
+        if (!fetchResponse.ok) {
+          const errorText = await fetchResponse.text();
+          console.error(`❌ [UPLOAD] Error del servidor (${fetchResponse.status}):`, errorText);
+          throw new Error(`Error al subir el archivo: ${fetchResponse.status} ${fetchResponse.statusText}`);
+        }
+        
+        const rawResponseText = await fetchResponse.text();
+        console.log(`📦 [UPLOAD] Respuesta raw (primeros 200 chars):`, rawResponseText.substring(0, 200));
+        
+        let responseData: any;
+        try {
+          responseData = JSON.parse(rawResponseText);
+        } catch (jsonError: any) {
+          console.error('❌ [UPLOAD] Error al parsear JSON de la respuesta:', jsonError);
+          console.error('❌ [UPLOAD] Respuesta raw completa:', rawResponseText);
+          throw new Error(`Error al procesar la respuesta del servidor: ${jsonError.message}`);
+        }
+        
+        const uploadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`✅ [UPLOAD] Archivo subido exitosamente en ${uploadTime}s`);
+        console.log(`📦 [UPLOAD] Respuesta completa:`, JSON.stringify(responseData, null, 2));
+        
+        // Validar que la respuesta sea exitosa
+        if (!responseData || !responseData.fileKey) {
+          console.error('❌ [UPLOAD] Respuesta inválida del servidor');
+          throw new Error('El servidor no devolvió una respuesta válida. Por favor, intenta nuevamente.');
+        }
+        
+        return responseData.fileKey;
+      } else {
+        // Fallback para otras plataformas (no debería llegar aquí en React Native)
+        throw new Error('Plataforma no soportada');
       }
-      throw error;
+    } catch (error: any) {
+      const uploadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.error(`❌ [UPLOAD] Error en upload después de ${uploadTime}s:`, error);
+      
+      if (error.message?.includes('timeout') || error.message?.includes('TIMEOUT')) {
+        throw new Error(`El archivo es demasiado grande o la conexión es lenta (timeout después de ${uploadTime}s). Por favor, intenta con un archivo más pequeño o verifica tu conexión a internet.`);
+      } else if (error.message?.includes('Network Error') || error.message?.includes('network')) {
+        throw new Error('Error de conexión. Por favor, verifica tu conexión a internet e intenta nuevamente.');
+      } else if (error.message?.includes('Error al acceder al archivo')) {
+        throw new Error('Error al acceder al archivo. Por favor, intenta seleccionar el archivo nuevamente.');
+      } else {
+        throw new Error(`Error al subir archivo: ${error.message || 'Error desconocido'}`);
+      }
     }
   };
 

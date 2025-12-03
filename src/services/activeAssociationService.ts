@@ -63,12 +63,51 @@ export class ActiveAssociationService {
       const response = await apiClient.get('/active-association');
       
       if (response.data.success && response.data.data) {
-        return response.data.data;
+        const activeAssociation = response.data.data;
+        
+        // VALIDACIÓN CRÍTICA: Verificar que tenga estudiante si es necesario
+        console.log('✅ [ActiveAssociationService] Asociación activa obtenida:', {
+          id: activeAssociation._id,
+          account: activeAssociation.account?.nombre,
+          studentId: activeAssociation.student?._id,
+          studentNombre: activeAssociation.student?.nombre,
+          studentApellido: activeAssociation.student?.apellido,
+          tieneStudent: !!activeAssociation.student
+        });
+        
+        if (!activeAssociation.student) {
+          console.warn('⚠️ [ActiveAssociationService] Asociación activa no tiene estudiante');
+        }
+        
+        return activeAssociation;
       }
       
       return null;
     } catch (error: any) {
       console.error('❌ [ActiveAssociationService] Error obteniendo asociación activa:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Forzar actualización de la asociación activa desde el backend
+   * Útil cuando hay inconsistencias
+   */
+  static async forceRefreshActiveAssociation(): Promise<ActiveAssociation | null> {
+    try {
+      console.log('🔄 [ActiveAssociationService] Forzando actualización de asociación activa...');
+      const activeAssociation = await this.getActiveAssociation();
+      
+      if (activeAssociation) {
+        console.log('✅ [ActiveAssociationService] Asociación activa actualizada:', {
+          studentId: activeAssociation.student?._id,
+          studentNombre: activeAssociation.student?.nombre
+        });
+      }
+      
+      return activeAssociation;
+    } catch (error: any) {
+      console.error('❌ [ActiveAssociationService] Error forzando actualización:', error);
       return null;
     }
   }

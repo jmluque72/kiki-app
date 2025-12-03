@@ -127,6 +127,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Cargar asociación activa si existe
         if (storedActiveAssociation) {
           const activeAssociationData = JSON.parse(storedActiveAssociation);
+          console.log('💾 [AUTH CONTEXT] Cargando activeAssociation desde AsyncStorage:', {
+            studentId: activeAssociationData?.student?._id,
+            studentNombre: activeAssociationData?.student?.nombre || activeAssociationData?.student?.name,
+            studentApellido: activeAssociationData?.student?.apellido
+          });
           setActiveAssociation(activeAssociationData);
           console.log('🎯 Asociación activa cargada:', activeAssociationData.account.nombre);
         }
@@ -148,6 +153,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (activeAssociation) {
         const refreshed = await ActiveAssociationService.getActiveAssociation();
         if (refreshed) {
+          console.log('🔄 [AUTH CONTEXT] Refrescando asociación activa:', {
+            studentId: refreshed.student?._id,
+            studentNombre: refreshed.student?.nombre,
+            studentApellido: refreshed.student?.apellido
+          });
           setActiveAssociation(refreshed);
           await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_ASSOCIATION, JSON.stringify(refreshed));
         }
@@ -252,6 +262,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Configurar la asociación activa si viene del login
       if (activeAssociationData) {
+        // VALIDACIÓN CRÍTICA: Verificar que el estudiante esté presente
+        console.log('💾 [AUTH CONTEXT] Guardando activeAssociation desde login:', {
+          studentId: activeAssociationData?.student?._id,
+          studentNombre: activeAssociationData?.student?.nombre || activeAssociationData?.student?.name,
+          studentApellido: activeAssociationData?.student?.apellido,
+          tieneStudent: !!activeAssociationData?.student
+        });
+        
+        if (!activeAssociationData.student) {
+          console.error('❌ [AUTH CONTEXT] ERROR: activeAssociationData no tiene estudiante!', activeAssociationData);
+        }
+        
         setActiveAssociation(activeAssociationData);
         await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_ASSOCIATION, JSON.stringify(activeAssociationData));
       }

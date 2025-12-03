@@ -306,15 +306,68 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     institucion: require('../assets/design/icons/kiki_notificaciones.png')
   };
   
-  // Filtrar notificaciones para mostrar solo coordinador e institucion
+  // Filtrar notificaciones para mostrar coordinador, institucion y tutor
   const filteredNotifications = (notifications || []).filter((notification: any) => {
     if (!notification || !notification.type) return false;
     const type = notification.type.toLowerCase();
-    return type === 'coordinador' || type === 'institucion';
+    return type === 'coordinador' || type === 'institucion' || type === 'tutor';
   });
 
   const getTypeIcon = (type: string) => {
     return notificationIcons[type] || notificationIcons.coordinador;
+  };
+
+  // Función auxiliar para determinar si un objeto es un estudiante
+  // Los estudiantes generalmente tienen 'nombre' pero no 'name', o tienen un campo que los identifica
+  const isStudent = (person: any): boolean => {
+    if (!person) return false;
+    // Si tiene 'nombre' pero no 'name', probablemente es un estudiante
+    if (person.nombre && !person.name) return true;
+    // Si tiene 'apellido', también es un estudiante
+    if (person.apellido) return true;
+    // Si tiene un campo 'role' que indique estudiante
+    if (person.role && (person.role.nombre === 'estudiante' || person.role === 'estudiante')) return true;
+    return false;
+  };
+
+  // Función para obtener el nombre completo de una persona (estudiante o usuario)
+  const getPersonDisplayName = (person: any): string => {
+    if (!person) return 'Desconocido';
+    
+    // Si es un string (solo ID), retornar desconocido
+    if (typeof person === 'string') {
+      return 'Desconocido';
+    }
+    
+    // Si es estudiante, usar nombre y apellido
+    if (isStudent(person)) {
+      const fullName = `${person.nombre || ''} ${person.apellido || ''}`.trim();
+      return fullName || 'Estudiante';
+    }
+    
+    // Si es usuario, usar name o nombre
+    // También verificar si tiene email como fallback
+    const displayName = person.name || person.nombre || person.email || null;
+    
+    if (displayName) {
+      return displayName;
+    }
+    
+    // Si tiene _id pero no nombre, podría ser un objeto parcial
+    // Intentar obtener más información del objeto
+    if (person._id) {
+      console.log('⚠️ [NOTIFICATION] Receptor sin nombre pero con _id:', person);
+    }
+    
+    return 'Desconocido';
+  };
+
+  // Función para obtener el nombre del estudiante asociado si existe
+  const getStudentName = (person: any): string | null => {
+    if (isStudent(person)) {
+      return `${person.nombre || ''} ${person.apellido || ''}`.trim() || null;
+    }
+    return null;
   };
 
   const renderNotification = ({ item }: { item: any }) => {
@@ -328,8 +381,215 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     // Validar propiedades requeridas
     const notificationTitle = item.title || 'Sin título';
     const notificationType = item.type || 'coordinador';
-    // El sender puede tener 'name' (User) o 'nombre' (si viene del servidor transformado)
-    const senderName = item.sender?.name || item.sender?.nombre || 'Desconocido';
+    
+    // Obtener información del emisor
+    const senderName = getPersonDisplayName(item.sender);
+    // Si el tipo es "tutor", mostrar el estudiante al lado del emisor
+    // Si el tipo es "coordinador", mostrar el estudiante abajo como campo separado
+    const isTutorNotification = notificationType === 'tutor';
+    const isCoordinadorNotification = notificationType === 'coordinador';
+    
+    // Para tipo "tutor", obtener el estudiante desde associatedStudent de la notificación
+    // (este campo se guarda cuando se crea la notificación de acción rápida)
+    // Para otros tipos, obtener desde sender.associatedStudent
+    let senderAssociatedStudentName = null;
+    if (isTutorNotification && item.associatedStudent) {
+      // Para tipo "tutor", usar el associatedStudent de la notificación
+      senderAssociatedStudentName = `${item.associatedStudent.nombre || ''} ${item.associatedStudent.apellido || ''}`.trim();
+    } else if (item.sender?.associatedStudent) {
+      // Para otros tipos, usar el associatedStudent del sender
+      senderAssociatedStudentName = `${item.sender.associatedStudent.nombre} ${item.sender.associatedStudent.apellido}`.trim();
+    } else {
+      // Fallback: intentar obtener desde getStudentName
+      senderAssociatedStudentName = getStudentName(item.sender) || null;
+    }
+    
+    // Solo mostrar el estudiante al lado del emisor si es tipo "tutor"
+    const senderStudentName = isTutorNotification && senderAssociatedStudentName
+      ? senderAssociatedStudentName
+      : null;
+    
+    // Para tipo "coordinador", guardar el estudiante para mostrarlo abajo
+    const coordinadorStudentName = isCoordinadorNotification && senderAssociatedStudentName
+      ? senderAssociatedStudentName
+      : null;
+    
+    // Función para contar cuántos estudiantes hay en los recipients
+    const countStudents = (): number => {
+      if (!item.recipients || item.recipients.length === 0) {
+        return 0;
+      }
+      
+      return item.recipients.filter((recipient: any) => {
+        // Si es un objeto
+        if (typeof recipient === 'object' && recipient !== null) {
+          // Si tiene nombre y apellido, es un estudiante
+          if (recipient.nombre && recipient.apellido) {
+            return true;
+          }
+          // Si tiene nombre pero no name, es un estudiante
+          if (recipient.nombre && !recipient.name) {
+            return true;
+          }
+          // Si es un estudiante según la función isStudent
+          if (isStudent(recipient)) {
+            return true;
+          }
+        }
+        // Si es un string (ID), no podemos determinar si es estudiante sin más información
+        // En este caso, asumimos que si el backend lo envió como recipient, podría ser estudiante
+        // Pero para ser conservadores, no lo contamos
+        return false;
+      }).length;
+    };
+    
+    // Obtener información de los receptores
+    const formatRecipients = () => {
+      const activeStudent = getActiveStudent();
+      const activeStudentId = activeStudent?._id?.toString();
+      
+      // Si el usuario es tutor y tiene estudiante activo, y está viendo la notificación,
+      // significa que su estudiante está en los recipients
+      if ((isFamilyAdmin || isFamilyViewer) && activeStudent && activeStudentId) {
+        // Verificar si el estudiante activo está en los recipients
+        const isStudentInRecipients = item.recipients && item.recipients.some((recipient: any) => {
+          let recipientId: string | null = null;
+          
+          if (typeof recipient === 'string') {
+            recipientId = recipient.toString();
+          } else if (recipient && typeof recipient === 'object') {
+            recipientId = recipient._id?.toString() || (recipient.toString ? recipient.toString() : null);
+          }
+          
+          return recipientId === activeStudentId;
+        });
+        
+        // Si el estudiante activo está en recipients, mostrar su nombre
+        if (isStudentInRecipients) {
+          return `${activeStudent.nombre} ${activeStudent.apellido}`.trim();
+        }
+      }
+      
+      // Si no hay recipients o están vacíos
+      if (!item.recipients || item.recipients.length === 0) {
+        return 'Sin receptores';
+      }
+      
+      // Procesar recipients normalmente
+      const recipientNames = item.recipients.map((recipient: any) => {
+        // Si el recipient es solo un string (ID)
+        if (typeof recipient === 'string') {
+          // Si es el estudiante activo, mostrar su nombre
+          if (activeStudentId && recipient.toString() === activeStudentId && activeStudent) {
+            return `${activeStudent.nombre} ${activeStudent.apellido}`.trim();
+          }
+          return null;
+        }
+        
+        // Si el recipient es un objeto
+        if (typeof recipient === 'object' && recipient !== null) {
+          const recipientId = recipient._id?.toString() || (recipient.toString ? recipient.toString() : null);
+          
+          // Si es el estudiante activo, mostrar su nombre
+          if (activeStudentId && recipientId === activeStudentId && activeStudent) {
+            return `${activeStudent.nombre} ${activeStudent.apellido}`.trim();
+          }
+          
+          // Si es un estudiante (tiene nombre y apellido), mostrar su nombre
+          if (recipient.nombre && recipient.apellido) {
+            return `${recipient.nombre} ${recipient.apellido}`.trim();
+          }
+          
+          // Si es un estudiante (tiene nombre pero no apellido), mostrar solo nombre
+          if (recipient.nombre && !recipient.name) {
+            return recipient.nombre;
+          }
+          
+          // Si es un usuario (tiene name), mostrar su nombre
+          if (recipient.name) {
+            return recipient.name;
+          }
+          
+          // Si no tiene nombre ni name ni _id válido
+          if (!recipient.nombre && !recipient.name && !recipientId) {
+            return null;
+          }
+        }
+        
+        // Obtener el nombre del recipient
+        const recipientName = getPersonDisplayName(recipient);
+        
+        // Si es un estudiante, mostrar su nombre completo
+        if (isStudent(recipient)) {
+          const fullName = `${recipient.nombre || ''} ${recipient.apellido || ''}`.trim();
+          return fullName || recipientName;
+        }
+        
+        // Si el receptor es tutor y tiene estudiante asociado, mostrar el estudiante como receptor
+        const recipientStudentName = recipient?.associatedStudent
+          ? `${recipient.associatedStudent.nombre} ${recipient.associatedStudent.apellido}`.trim()
+          : null;
+        
+        if (recipientStudentName) {
+          return recipientStudentName;
+        }
+        
+        return recipientName;
+      }).filter((name: string | null) => name !== null && name !== 'Desconocido');
+      
+      if (recipientNames.length === 0) {
+        return 'Receptores no disponibles';
+      }
+      
+      return recipientNames.join(', ');
+    };
+    
+    // Contar estudiantes para decidir si mostrar el campo
+    const studentCount = countStudents();
+    const shouldShowStudentField = !isCoordinador || (isCoordinador && studentCount === 1);
+    
+    // Función para obtener el estudiante destinatario desde recipients
+    // (para notificaciones de tipo "coordinador" o "institucion" cuando el usuario es tutor)
+    const getStudentFromRecipients = (): string | null => {
+      if (!item.recipients || item.recipients.length === 0) {
+        return null;
+      }
+      
+      // Obtener el estudiante activo del tutor actual
+      const activeStudent = getActiveStudent();
+      const activeStudentId = activeStudent?._id?.toString();
+      
+      if (!activeStudentId) {
+        return null;
+      }
+      
+      // Buscar el recipient que coincida con el estudiante activo del tutor
+      const studentRecipient = item.recipients.find((recipient: any) => {
+        let recipientId: string | null = null;
+        
+        if (typeof recipient === 'string') {
+          recipientId = recipient.toString();
+        } else if (recipient && typeof recipient === 'object') {
+          recipientId = recipient._id?.toString() || (recipient.toString ? recipient.toString() : null);
+        }
+        
+        return recipientId === activeStudentId;
+      });
+      
+      if (studentRecipient) {
+        // Si es un objeto con nombre y apellido
+        if (typeof studentRecipient === 'object' && studentRecipient.nombre) {
+          const fullName = `${studentRecipient.nombre || ''} ${studentRecipient.apellido || ''}`.trim();
+          return fullName || studentRecipient.nombre;
+        }
+        // Si es el estudiante activo, usar su nombre
+        if (activeStudent) {
+          return `${activeStudent.nombre} ${activeStudent.apellido}`.trim();
+        }
+      }
+      
+      return null;
+    };
     
     // Obtener nombre del estudiante si es familyadmin o familyviewer
     // IMPORTANTE: Solo mostrar el estudiante que está asociado al tutor actual
@@ -338,14 +598,6 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
       // Obtener el estudiante activo del tutor actual
       const activeStudent = getActiveStudent();
       const activeStudentId = activeStudent?._id?.toString();
-      
-      console.log('🔍 [NOTIFICATION] Buscando estudiante del tutor actual');
-      console.log('🔍 [NOTIFICATION] Active student ID:', activeStudentId);
-      console.log('🔍 [NOTIFICATION] Recipients:', item.recipients.map((r: any) => ({
-        id: r._id?.toString(),
-        nombre: r.nombre,
-        name: r.name
-      })));
       
       if (activeStudentId) {
         // Buscar el recipient que coincida con el estudiante activo del tutor
@@ -356,12 +608,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         
         if (studentRecipient && studentRecipient.nombre) {
           studentName = studentRecipient.nombre;
-          console.log('✅ [NOTIFICATION] Estudiante encontrado:', studentName);
-        } else {
-          console.log('⚠️ [NOTIFICATION] No se encontró el estudiante del tutor en los recipients');
         }
-      } else {
-        console.log('⚠️ [NOTIFICATION] No hay estudiante activo para el tutor');
       }
     }
     
@@ -394,9 +641,42 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
               ]}>
                 {notificationTitle}
               </Text>
-              <Text style={styles.notificationSender}>
-                {senderName}
-              </Text>
+              <View style={styles.notificationMeta}>
+                <Text style={styles.metaLabel}>Emisor:</Text>
+                <Text style={styles.metaValue}>
+                  {senderName}
+                  {senderStudentName && ` (${senderStudentName})`}
+                </Text>
+              </View>
+              {/* Mostrar campo "Estudiante" solo para tutores (familyadmin/familyviewer), NO para coordinadores */}
+              {!isCoordinador && (
+                <>
+                  {/* Para tipo "coordinador" o "institucion" cuando el usuario es tutor, 
+                      mostrar el estudiante destinatario desde recipients */}
+                  {(isCoordinadorNotification || notificationType === 'institucion') && (isFamilyAdmin || isFamilyViewer) && (
+                    (() => {
+                      const studentFromRecipients = getStudentFromRecipients();
+                      return studentFromRecipients ? (
+                        <View style={styles.notificationMeta}>
+                          <Text style={styles.metaLabel}>Estudiante:</Text>
+                          <Text style={styles.metaValue}>
+                            {studentFromRecipients}
+                          </Text>
+                        </View>
+                      ) : null;
+                    })()
+                  )}
+                  {/* Para tipo "tutor", mostrar el campo de estudiantes si corresponde */}
+                  {notificationType === 'tutor' && shouldShowStudentField && (
+                    <View style={styles.notificationMeta}>
+                      <Text style={styles.metaLabel}>Estudiante:</Text>
+                      <Text style={styles.metaValue}>
+                        {formatRecipients()}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
               {studentName && (
                 <Text style={styles.studentName}>
                   Hijo: {studentName}
@@ -609,7 +889,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
               onPress={() => setActiveTab('received')}
             >
               <Text style={[styles.tabText, activeTab === 'received' && styles.activeTabText]}>
-                Enviadas
+                {isCoordinador ? 'Enviadas/recibidas' : 'Enviadas'}
               </Text>
             </TouchableOpacity>
             
@@ -988,6 +1268,22 @@ const styles = StyleSheet.create({
   notificationSender: {
     fontSize: 12,
     color: '#666666',
+  },
+  notificationMeta: {
+    flexDirection: 'row',
+    marginTop: 4,
+    alignItems: 'flex-start',
+  },
+  metaLabel: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  metaValue: {
+    fontSize: 12,
+    color: '#333333',
+    flex: 1,
   },
   studentName: {
     fontSize: 12,

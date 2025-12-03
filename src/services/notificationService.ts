@@ -5,11 +5,15 @@ export interface Notification {
   _id: string;
   title: string;
   message: string;
-  type: 'informacion' | 'comunicacion';
+  type: 'informacion' | 'comunicacion' | 'institucion' | 'coordinador' | 'tutor';
   sender: {
     _id: string;
     nombre: string;
     email: string;
+    associatedStudent?: {
+      nombre: string;
+      apellido: string;
+    };
   };
   account: {
     _id: string;
@@ -23,7 +27,16 @@ export interface Notification {
     _id: string;
     nombre: string;
     email: string;
+    associatedStudent?: {
+      nombre: string;
+      apellido: string;
+    };
   }>;
+  associatedStudent?: {
+    _id: string;
+    nombre: string;
+    apellido: string;
+  };
   readBy: Array<{
     user: string;
     readAt: string;

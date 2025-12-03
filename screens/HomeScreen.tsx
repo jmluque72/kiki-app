@@ -31,6 +31,7 @@ import AcercaDeScreen from './AcercaDeScreen';
 import TerminosCondicionesScreen from './TerminosCondicionesScreen';
 import StudentActionsScreen from '../src/screens/StudentActionsScreen';
 import FamilyActionsCalendarScreen from '../src/screens/FamilyActionsCalendarScreen';
+import TutorQuickActionsScreen from '../src/screens/TutorQuickActionsScreen';
 import FormulariosScreen from './FormulariosScreen';
 import CompleteFormScreen from './CompleteFormScreen';
 import FormRequestService, { FormRequest } from '../src/services/formRequestService';
@@ -60,6 +61,21 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
   const [pendingFormsCount, setPendingFormsCount] = useState(0);
   const [hasRequiredPending, setHasRequiredPending] = useState(false);
   const [showRequiredFormsModal, setShowRequiredFormsModal] = useState(false);
+  const [showPerfil, setShowPerfil] = useState(false);
+  
+  // Debug: Log cuando cambia showPerfil
+  useEffect(() => {
+    console.log('🔍 [HomeScreen] showPerfil cambió a:', showPerfil);
+  }, [showPerfil]);
+  
+  // Debug: Log cuando cambian los estados
+  useEffect(() => {
+    console.log('🔍 [HomeScreen] showPerfil cambió a:', showPerfil);
+  }, [showPerfil]);
+  
+  useEffect(() => {
+    console.log('🔍 [HomeScreen] showAssociations cambió a:', showAssociations);
+  }, [showAssociations]);
   
   // Función para abrir formularios
   const handleOpenFormularios = () => {
@@ -183,18 +199,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
     const role = getUserRole();
     
     // Pestañas base que todos ven
-    const baseTabs = ['Inicio', 'Perfil'];
+    const baseTabs = ['Inicio'];
     
     // Pestañas específicas por rol
     if (role === 'coordinador') {
-      // Coordinadores ven todas las pestañas: Inicio, Asistencia, Actividad, Eventos, Perfil
-      return ['Inicio', 'Asistencia', 'Actividad', 'Eventos', 'Perfil'];
+      // Coordinadores ven todas las pestañas: Inicio, Asistencia, Actividad, Eventos
+      return ['Inicio', 'Asistencia', 'Actividad', 'Eventos'];
     } else if (role === 'familyadmin') {
-      // Familyadmin ven: Inicio, Álbum, Eventos, Perfil (sin Asistencias)
-      return ['Inicio', 'Álbum', 'Eventos', 'Perfil'];
+      // Familyadmin ven: Inicio, Comunicaciones, Álbum, Eventos
+      return ['Inicio', 'Comunicaciones', 'Álbum', 'Eventos'];
     } else if (role === 'familyviewer') {
-      // Familyviewer ven: Inicio, Álbum, Eventos, Perfil (sin Asistencias)
-      return ['Inicio', 'Álbum', 'Eventos', 'Perfil'];
+      // Familyviewer ven: Inicio, Comunicaciones, Álbum, Eventos
+      return ['Inicio', 'Comunicaciones', 'Álbum', 'Eventos'];
     } else {
       // Para otros roles, solo mostrar pestañas base
       return baseTabs;
@@ -223,7 +239,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
             borderTopWidth: 0,
             paddingBottom: 0,
             paddingTop: 0,
-            height: 100,
+            height: 80,
             position: 'absolute',
             elevation: 0,
           },
@@ -363,24 +379,26 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
             }}
           />
         )}
-        
-        {/* Pestaña Perfil - Siempre visible */}
-        <Tab.Screen
-          name="Perfil"
-          component={() => <PerfilScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} onOpenActiveAssociation={onOpenActiveAssociation} />}
-          options={{
-            headerShown: false,
-            tabBarIcon: ({ focused }) => (
-              <View style={styles.tabIconContainer}>
-                <Image
-                  source={require('../assets/design/icons/home_tab_5_user.png')}
-                  style={[styles.tabIconImage, { tintColor: focused ? '#FF8C42' : '#FFFFFF' }]}
-                  resizeMode="contain"
-                />
-              </View>
-            ),
-          }}
-        />
+
+        {/* Pestaña Comunicaciones - Solo para familyadmin (4to tab) */}
+        {visibleTabs.includes('Comunicaciones') && (
+          <Tab.Screen
+            name="Comunicaciones"
+            component={() => <TutorQuickActionsScreen onOpenNotifications={handleOpenNotifications} onOpenMenu={openMenu} onOpenActiveAssociation={onOpenActiveAssociation} />}
+            options={{
+              headerShown: false,
+              tabBarIcon: ({ focused }) => (
+                <View style={styles.tabIconContainer}>
+                  <Image
+                    source={require('../assets/design/icons/kiki_notificaciones.png')}
+                    style={[styles.tabIconImage, { tintColor: focused ? '#FF8C42' : '#FFFFFF' }]}
+                    resizeMode="contain"
+                  />
+                </View>
+              ),
+            }}
+          />
+        )}
       </Tab.Navigator>
       
       {/* Centro de Notificaciones */}
@@ -424,8 +442,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
                 onOpenActiveAssociation?.();
               }}
               onOpenAssociations={() => {
+                console.log('✅ [HomeScreen] onOpenAssociations EJECUTADO');
                 closeMenu();
+                console.log('✅ [HomeScreen] closeMenu llamado, ahora setShowAssociations(true)');
                 setShowAssociations(true);
+                console.log('✅ [HomeScreen] setShowAssociations(true) ejecutado');
               }}
               onOpenQuienRetira={() => {
                 closeMenu();
@@ -447,6 +468,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
                 closeMenu();
                 setShowAcciones(true);
               }}
+              onOpenPerfil={() => {
+                closeMenu();
+                setShowPerfil(true);
+              }}
               openFormularios={() => {
                 closeMenu();
                 setShowFormularios(true);
@@ -464,7 +489,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
         animationType="slide"
         onRequestClose={() => setShowAssociations(false)}
       >
-        <AssociationsScreen onBack={() => setShowAssociations(false)} />
+        <AssociationsScreen 
+          onBack={() => setShowAssociations(false)}
+          onOpenPerfil={() => {
+            console.log('🔍 [HomeScreen] onOpenPerfil desde AssociationsScreen');
+            setShowAssociations(false);
+            setShowPerfil(true);
+          }}
+        />
       </Modal>
 
       {/* Modal de Quien Retira */}
@@ -641,6 +673,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenActiveAssociation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Perfil */}
+      <Modal
+        visible={showPerfil}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowPerfil(false)}
+      >
+        <PerfilScreen 
+          onBack={() => setShowPerfil(false)}
+          onOpenNotifications={handleOpenNotifications} 
+          onOpenMenu={openMenu} 
+          onOpenActiveAssociation={onOpenActiveAssociation}
+        />
+      </Modal>
+
     </>
   );
 };
@@ -650,30 +698,30 @@ const styles = StyleSheet.create({
   tabIconContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 60,
-    height: 60,
-    marginTop: 45,
+    width: 50,
+    height: 50,
+    marginTop: 15,
   },
   tabIcon: {
     fontSize: 24,
   },
   tabIconImage: {
-    width: 32,
-    height: 32,
+    width: 24,
+    height: 24,
   },
   // Estilos para el bottom tab personalizado
   customTabBar: {
     flex: 1,
     backgroundColor: '#0E5FCE',
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    paddingTop: 15,
-    paddingBottom: 25,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 10,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 8,
   },
   // Estilos para el modal del menú
   menuModalOverlay: {

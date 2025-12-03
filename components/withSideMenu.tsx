@@ -115,6 +115,9 @@ const withSideMenu = <P extends object>(
                          closeMenu();
                          setShowAcciones(true);
                        }}
+                       onOpenPerfil={() => {
+                         // No hacer nada aquí, el perfil se maneja desde HomeScreen
+                       }}
                        openFormularios={() => {
                          closeMenu();
                          setShowFormularios(true);

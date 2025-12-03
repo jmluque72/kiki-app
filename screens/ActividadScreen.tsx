@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useInstitution } from '../contexts/InstitutionContext';
-import { useAuth } from "../contexts/AuthContextHybrid"
+import { useAuth } from "../contexts/AuthContextHybrid";
 import { useStudents } from '../src/hooks/useStudents';
 import { API_FULL_URL } from '../src/config/apiConfig';
 import { apiClient } from '../src/services/api';
@@ -96,6 +96,75 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
       console.error('❌ [ACTIVIDAD] Error copiando archivo, usando URI original:', error);
       // Si falla la copia, retornar URI original (puede funcionar si el archivo aún existe)
       return imageUri;
+    }
+  };
+
+  // Función para copiar video temporal a lugar permanente en Android
+  // IMPORTANTE: En Android, las URIs content:// no funcionan directamente con FormData
+  // Esta función valida y normaliza la URI para que funcione correctamente
+  const copyVideoToPermanentLocation = async (videoUri: string, mimeType: string = 'video/mp4'): Promise<string> => {
+    if (Platform.OS !== 'android') {
+      return videoUri; // En iOS, retornar URI original
+    }
+
+    try {
+      console.log('📹 [ACTIVIDAD] Procesando video para Android');
+      console.log('🔗 [ACTIVIDAD] URI original:', videoUri);
+      console.log('📄 [ACTIVIDAD] MIME type:', mimeType);
+      
+      // Si ya es un archivo file:// permanente, retornar tal cual
+      if (videoUri.startsWith('file://') && !videoUri.includes('rn_image_picker_lib_temp')) {
+        console.log('✅ [ACTIVIDAD] Video ya es file:// permanente, no necesita procesamiento');
+        return videoUri;
+      }
+
+      // Para URIs content://, intentar leer el archivo para validar que esté disponible
+      // Nota: FormData en React Native debería manejar content:// URIs, pero a veces falla
+      if (videoUri.startsWith('content://')) {
+        console.log('📥 [ACTIVIDAD] URI es content://, validando acceso...');
+        try {
+          const response = await fetch(videoUri);
+          if (!response.ok) {
+            throw new Error(`Error al leer el video: ${response.status} ${response.statusText}`);
+          }
+          const blob = await response.blob();
+          console.log('✅ [ACTIVIDAD] Video accesible, tamaño:', blob.size, 'bytes');
+          console.log('✅ [ACTIVIDAD] URI content:// debería funcionar con FormData');
+          // Retornar URI original - FormData debería manejarlo
+          return videoUri;
+        } catch (fetchError: any) {
+          console.error('❌ [ACTIVIDAD] Error validando video con fetch:', fetchError);
+          console.warn('⚠️ [ACTIVIDAD] Intentando usar URI original de todas formas');
+          // Retornar URI original - puede funcionar si el problema es solo con fetch
+          return videoUri;
+        }
+      }
+
+      // Para archivos temporales, intentar leer para validar
+      if (videoUri.includes('rn_image_picker_lib_temp')) {
+        console.log('⚠️ [ACTIVIDAD] URI es archivo temporal, validando acceso...');
+        try {
+          const response = await fetch(videoUri);
+          if (!response.ok) {
+            throw new Error(`Error al leer el video temporal: ${response.status}`);
+          }
+          const blob = await response.blob();
+          console.log('✅ [ACTIVIDAD] Video temporal accesible, tamaño:', blob.size, 'bytes');
+          console.log('⚠️ [ACTIVIDAD] ADVERTENCIA: Archivo temporal puede desaparecer antes de la subida');
+          return videoUri;
+        } catch (fetchError: any) {
+          console.error('❌ [ACTIVIDAD] Error validando video temporal:', fetchError);
+          throw new Error('El archivo temporal ya no es accesible. Por favor, selecciona el video nuevamente.');
+        }
+      }
+
+      // Si no es content:// ni temporal, retornar tal cual
+      console.log('✅ [ACTIVIDAD] URI no requiere procesamiento especial');
+      return videoUri;
+    } catch (error: any) {
+      console.error('❌ [ACTIVIDAD] Error procesando video:', error);
+      console.error('❌ [ACTIVIDAD] Error details:', error.message);
+      throw error; // Re-lanzar el error para que se maneje arriba
     }
   };
   
@@ -211,20 +280,38 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
         }
         
         // En Android, copiar archivo temporal a lugar permanente inmediatamente
-        if (Platform.OS === 'android' && asset.uri && !asset.type?.startsWith('video/')) {
-          console.log('📱 [ACTIVIDAD] Android detectado - copiando imagen inmediatamente');
-          console.log('🔗 [ACTIVIDAD] URI original:', asset.uri);
-          copyImageToPermanentLocation(asset.uri).then((permanentUri) => {
-            console.log('✅ [ACTIVIDAD] Imagen copiada exitosamente');
-            console.log('🔗 [ACTIVIDAD] URI permanente:', permanentUri);
-            const permanentAsset = { ...asset, uri: permanentUri };
-            setSelectedImages(prev => [...prev, permanentAsset]);
-          }).catch((error) => {
-            console.error('❌ [ACTIVIDAD] Error copiando imagen, usando original:', error);
-            console.error('❌ [ACTIVIDAD] Error details:', error);
-            // Usar original de todas formas - puede funcionar si el archivo aún existe
-            setSelectedImages(prev => [...prev, asset]);
-          });
+        if (Platform.OS === 'android' && asset.uri) {
+          if (asset.type?.startsWith('video/')) {
+            // Procesar video con fetch para asegurar disponibilidad
+            console.log('📱 [ACTIVIDAD] Android detectado - procesando video inmediatamente');
+            console.log('🔗 [ACTIVIDAD] URI original:', asset.uri);
+            copyVideoToPermanentLocation(asset.uri, asset.type).then((processedUri) => {
+              console.log('✅ [ACTIVIDAD] Video procesado exitosamente');
+              console.log('🔗 [ACTIVIDAD] URI procesado:', processedUri);
+              const processedAsset = { ...asset, uri: processedUri };
+              setSelectedImages(prev => [...prev, processedAsset]);
+            }).catch((error) => {
+              console.error('❌ [ACTIVIDAD] Error procesando video, usando original:', error);
+              console.error('❌ [ACTIVIDAD] Error details:', error);
+              // Usar original de todas formas - puede funcionar si el archivo aún existe
+              setSelectedImages(prev => [...prev, asset]);
+            });
+          } else {
+            // Procesar imagen
+            console.log('📱 [ACTIVIDAD] Android detectado - copiando imagen inmediatamente');
+            console.log('🔗 [ACTIVIDAD] URI original:', asset.uri);
+            copyImageToPermanentLocation(asset.uri).then((permanentUri) => {
+              console.log('✅ [ACTIVIDAD] Imagen copiada exitosamente');
+              console.log('🔗 [ACTIVIDAD] URI permanente:', permanentUri);
+              const permanentAsset = { ...asset, uri: permanentUri };
+              setSelectedImages(prev => [...prev, permanentAsset]);
+            }).catch((error) => {
+              console.error('❌ [ACTIVIDAD] Error copiando imagen, usando original:', error);
+              console.error('❌ [ACTIVIDAD] Error details:', error);
+              // Usar original de todas formas - puede funcionar si el archivo aún existe
+              setSelectedImages(prev => [...prev, asset]);
+            });
+          }
         } else {
           setSelectedImages(prev => [...prev, asset]);
         }
@@ -290,25 +377,39 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
         
         // En Android, copiar archivos temporales a lugar permanente inmediatamente
         if (Platform.OS === 'android') {
-          console.log('📱 [ACTIVIDAD] Android detectado - copiando', validAssets.length, 'imágenes inmediatamente');
+          console.log('📱 [ACTIVIDAD] Android detectado - procesando', validAssets.length, 'archivos inmediatamente');
           const copyPromises = validAssets.map(async (asset, index) => {
-            if (asset.uri && !asset.type?.startsWith('video/')) {
-              console.log(`📱 [ACTIVIDAD] Copiando imagen ${index + 1}/${validAssets.length}:`, asset.uri.substring(0, 50) + '...');
-              try {
-                const permanentUri = await copyImageToPermanentLocation(asset.uri);
-                console.log(`✅ [ACTIVIDAD] Imagen ${index + 1} copiada a:`, permanentUri.substring(0, 50) + '...');
-                return { ...asset, uri: permanentUri };
-              } catch (error) {
-                console.error(`❌ [ACTIVIDAD] Error copiando imagen ${index + 1}, usando original:`, error);
-                return asset;
+            if (asset.uri) {
+              if (asset.type?.startsWith('video/')) {
+                // Procesar video con fetch
+                console.log(`📹 [ACTIVIDAD] Procesando video ${index + 1}/${validAssets.length}:`, asset.uri.substring(0, 50) + '...');
+                try {
+                  const processedUri = await copyVideoToPermanentLocation(asset.uri, asset.type);
+                  console.log(`✅ [ACTIVIDAD] Video ${index + 1} procesado:`, processedUri.substring(0, 50) + '...');
+                  return { ...asset, uri: processedUri };
+                } catch (error) {
+                  console.error(`❌ [ACTIVIDAD] Error procesando video ${index + 1}, usando original:`, error);
+                  return asset;
+                }
+              } else {
+                // Procesar imagen
+                console.log(`📱 [ACTIVIDAD] Copiando imagen ${index + 1}/${validAssets.length}:`, asset.uri.substring(0, 50) + '...');
+                try {
+                  const permanentUri = await copyImageToPermanentLocation(asset.uri);
+                  console.log(`✅ [ACTIVIDAD] Imagen ${index + 1} copiada a:`, permanentUri.substring(0, 50) + '...');
+                  return { ...asset, uri: permanentUri };
+                } catch (error) {
+                  console.error(`❌ [ACTIVIDAD] Error copiando imagen ${index + 1}, usando original:`, error);
+                  return asset;
+                }
               }
             }
             return asset;
           });
           
-          Promise.all(copyPromises).then((permanentAssets) => {
-            console.log('✅ [ACTIVIDAD] Todas las imágenes copiadas, agregando a selectedImages');
-            setSelectedImages(prev => [...prev, ...permanentAssets]);
+          Promise.all(copyPromises).then((processedAssets) => {
+            console.log('✅ [ACTIVIDAD] Todos los archivos procesados, agregando a selectedImages');
+            setSelectedImages(prev => [...prev, ...processedAssets]);
           });
         } else {
           setSelectedImages(prev => [...prev, ...validAssets]);
@@ -722,78 +823,122 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
               if (Platform.OS === 'android') {
                 console.log('📱 [ACTIVIDAD] Android - usando fetch directamente');
                 
-                // Obtener el token más reciente del contexto
-                let currentToken = token;
-                if (!currentToken) {
-                  // Intentar obtener del storage si no está en el contexto
-                  try {
-                    const RefreshTokenService = require('../src/services/refreshTokenService').default;
-                    currentToken = await RefreshTokenService.getAccessToken();
-                    console.log('🔑 [ACTIVIDAD] Token obtenido del storage');
-                  } catch (tokenError) {
-                    console.error('❌ [ACTIVIDAD] Error obteniendo token:', tokenError);
+                // Función auxiliar para obtener el token actual
+                const getAuthToken = async (): Promise<string> => {
+                  const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                  let authToken = token;
+                  
+                  if (!authToken) {
+                    authToken = await RefreshTokenService.getAccessToken();
                   }
-                }
+                  
+                  if (!authToken) {
+                    throw new Error('No hay token de autenticación disponible. Por favor, inicia sesión nuevamente.');
+                  }
+                  
+                  // Verificar si el token está próximo a expirar (5 minutos antes)
+                  const isExpiringSoon = await RefreshTokenService.isTokenExpiringSoon();
+                  if (isExpiringSoon) {
+                    console.log('⚠️ [ACTIVIDAD] Token próximo a expirar, refrescando preventivamente...');
+                    try {
+                      authToken = await RefreshTokenService.refreshAccessToken();
+                      console.log('✅ [ACTIVIDAD] Token refrescado preventivamente');
+                    } catch (refreshError: any) {
+                      console.warn('⚠️ [ACTIVIDAD] No se pudo refrescar preventivamente, usando token actual:', refreshError?.message);
+                    }
+                  }
+                  
+                  return authToken;
+                };
                 
-                if (!currentToken) {
-                  throw new Error('No hay token de autenticación disponible');
-                }
+                // Función auxiliar para hacer la petición con retry en caso de 401
+                // IMPORTANTE: formData no es reutilizable después de la primera petición
+                const uploadWithRetry = async (retryCount = 0): Promise<Response> => {
+                  const authToken = await getAuthToken();
+                  
+                  console.log(`📤 [ACTIVIDAD] Intentando subir imagen (intento ${retryCount + 1})`);
+                  
+                  // Si es un retry, recrear el FormData desde la imagen original
+                  let formDataToUse = formData;
+                  if (retryCount > 0) {
+                    console.log('🔄 [ACTIVIDAD] Recreando FormData para retry...');
+                    const newFormData = new FormData();
+                    let imageUri = image.uri;
+                    if (Platform.OS === 'android') {
+                      if (!imageUri.startsWith('file://') && !imageUri.startsWith('content://')) {
+                        imageUri = `file://${imageUri}`;
+                      }
+                    }
+                    const imageFile = {
+                      uri: imageUri,
+                      type: image.type || 'image/jpeg',
+                      name: image.fileName || `activity-image-${i}.jpg`,
+                    } as any;
+                    newFormData.append('image', imageFile);
+                    formDataToUse = newFormData;
+                  }
+                  
+                  const fetchResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${authToken}`,
+                      // NO incluir Content-Type - fetch lo establecerá automáticamente con multipart/form-data y boundary
+                    },
+                    body: formDataToUse,
+                  });
+                  
+                  // Si recibimos 401 y no hemos reintentado, intentar refresh del token
+                  if (fetchResponse.status === 401 && retryCount === 0) {
+                    console.log('🔄 [ACTIVIDAD] Token expirado (401), intentando refresh...');
+                    const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                    
+                    try {
+                      const refreshToken = await RefreshTokenService.getRefreshToken();
+                      if (!refreshToken) {
+                        throw new Error('No hay refresh token disponible. Por favor, inicia sesión nuevamente.');
+                      }
+                      
+                      const newToken = await RefreshTokenService.refreshAccessToken();
+                      if (newToken) {
+                        console.log('✅ [ACTIVIDAD] Token renovado exitosamente');
+                        
+                        // Actualizar el token en AsyncStorage y apiClient
+                        const { setAuthToken } = require('../src/services/api');
+                        setAuthToken(newToken);
+                        const AsyncStorage = require('../src/utils/storage').default;
+                        await AsyncStorage.setItem('auth_token', newToken);
+                        
+                        // Reintentar con el nuevo token (el FormData se recreará en el retry)
+                        return uploadWithRetry(1);
+                      } else {
+                        throw new Error('No se pudo obtener un nuevo token después del refresh');
+                      }
+                    } catch (refreshError: any) {
+                      console.error('❌ [ACTIVIDAD] Error al refrescar token:', refreshError);
+                      const errorText = await fetchResponse.text();
+                      throw new Error(`Error al renovar la sesión: ${refreshError?.message || 'Error desconocido'}. Por favor, inicia sesión nuevamente.`);
+                    }
+                  }
+                  
+                  return fetchResponse;
+                };
                 
-                console.log('🔑 [ACTIVIDAD] Token disponible, longitud:', currentToken.length);
-                console.log('🔑 [ACTIVIDAD] Primeros caracteres del token:', currentToken.substring(0, 20) + '...');
-                
-                const fetchResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
-                  method: 'POST',
-                  body: formData,
-                  headers: {
-                    'Authorization': `Bearer ${currentToken}`,
-                    // NO incluir Content-Type - fetch lo establecerá automáticamente con boundary
-                  },
-                });
-                
-                console.log('📡 [ACTIVIDAD] Response status:', fetchResponse.status);
+                const fetchResponse = await uploadWithRetry(0);
                 
                 if (!fetchResponse.ok) {
                   const errorText = await fetchResponse.text();
-                  console.error('❌ [ACTIVIDAD] Error response:', errorText);
-                  
-                  // Si es 401, el token puede estar expirado
-                  if (fetchResponse.status === 401) {
-                    console.log('🔄 [ACTIVIDAD] Token expirado, intentando refresh...');
-                    try {
-                      const RefreshTokenService = require('../src/services/refreshTokenService').default;
-                      const newToken = await RefreshTokenService.refreshAccessToken();
-                      if (newToken) {
-                        console.log('✅ [ACTIVIDAD] Token renovado, reintentando upload...');
-                        // Reintentar con el nuevo token
-                        const retryResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
-                          method: 'POST',
-                          body: formData,
-                          headers: {
-                            'Authorization': `Bearer ${newToken}`,
-                          },
-                        });
-                        
-                        if (!retryResponse.ok) {
-                          const retryErrorText = await retryResponse.text();
-                          throw new Error(`Error ${retryResponse.status}: ${retryErrorText}`);
-                        }
-                        
-                        responseData = await retryResponse.json();
-                        console.log('✅ [ACTIVIDAD] Imagen subida con fetch después de refresh:', responseData);
-                      } else {
-                        throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
-                      }
-                    } catch (refreshError) {
-                      console.error('❌ [ACTIVIDAD] Error refrescando token:', refreshError);
-                      throw new Error(`Error de autenticación: ${errorText}`);
-                    }
-                  } else {
-                    throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
-                  }
-                } else {
-                  responseData = await fetchResponse.json();
+                  console.error(`❌ [ACTIVIDAD] Error del servidor (${fetchResponse.status}):`, errorText);
+                  throw new Error(`Error al subir la imagen: ${fetchResponse.status} ${fetchResponse.statusText}`);
+                }
+                
+                const rawResponseText = await fetchResponse.text();
+                try {
+                  responseData = JSON.parse(rawResponseText);
                   console.log('✅ [ACTIVIDAD] Imagen subida con fetch:', responseData);
+                } catch (jsonError: any) {
+                  console.error('❌ [ACTIVIDAD] Error al parsear JSON:', jsonError);
+                  console.error('❌ [ACTIVIDAD] Respuesta raw:', rawResponseText);
+                  throw new Error(`Error al procesar la respuesta del servidor: ${jsonError.message}`);
                 }
               } else {
                 // iOS - usar apiClient
@@ -847,75 +992,117 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
             if (Platform.OS === 'android') {
               console.log('📱 [ACTIVIDAD] Android - usando fetch directamente para imagen procesada');
               
-              // Obtener el token más reciente del contexto
-              let currentToken = token;
-              if (!currentToken) {
-                try {
-                  const RefreshTokenService = require('../src/services/refreshTokenService').default;
-                  currentToken = await RefreshTokenService.getAccessToken();
-                  console.log('🔑 [ACTIVIDAD] Token obtenido del storage para imagen procesada');
-                } catch (tokenError) {
-                  console.error('❌ [ACTIVIDAD] Error obteniendo token:', tokenError);
+              // Función auxiliar para obtener el token actual
+              const getAuthToken = async (): Promise<string> => {
+                const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                let authToken = token;
+                
+                if (!authToken) {
+                  authToken = await RefreshTokenService.getAccessToken();
                 }
-              }
+                
+                if (!authToken) {
+                  throw new Error('No hay token de autenticación disponible. Por favor, inicia sesión nuevamente.');
+                }
+                
+                // Verificar si el token está próximo a expirar (5 minutos antes)
+                const isExpiringSoon = await RefreshTokenService.isTokenExpiringSoon();
+                if (isExpiringSoon) {
+                  console.log('⚠️ [ACTIVIDAD] Token próximo a expirar, refrescando preventivamente...');
+                  try {
+                    authToken = await RefreshTokenService.refreshAccessToken();
+                    console.log('✅ [ACTIVIDAD] Token refrescado preventivamente');
+                  } catch (refreshError: any) {
+                    console.warn('⚠️ [ACTIVIDAD] No se pudo refrescar preventivamente, usando token actual:', refreshError?.message);
+                  }
+                }
+                
+                return authToken;
+              };
               
-              if (!currentToken) {
-                throw new Error('No hay token de autenticación disponible');
-              }
+              // Función auxiliar para hacer la petición con retry en caso de 401
+              // IMPORTANTE: formData no es reutilizable después de la primera petición
+              const uploadWithRetry = async (retryCount = 0): Promise<Response> => {
+                const authToken = await getAuthToken();
+                
+                console.log(`📤 [ACTIVIDAD] Intentando subir imagen procesada (intento ${retryCount + 1})`);
+                
+                // Si es un retry, recrear el FormData desde la imagen procesada original
+                let formDataToUse = formDataArray[i];
+                if (retryCount > 0) {
+                  console.log('🔄 [ACTIVIDAD] Recreando FormData para retry de imagen procesada...');
+                  const processedImage = processedImages[i];
+                  const newFormData = new FormData();
+                  const imageFile = {
+                    uri: processedImage.uri,
+                    type: 'image/jpeg',
+                    name: processedImage.uri.split('/').pop() || `activity-image-${i}.jpg`,
+                  } as any;
+                  newFormData.append('image', imageFile);
+                  formDataToUse = newFormData;
+                }
+                
+                const fetchResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    // NO incluir Content-Type - fetch lo establecerá automáticamente con multipart/form-data y boundary
+                  },
+                  body: formDataToUse,
+                });
+                
+                // Si recibimos 401 y no hemos reintentado, intentar refresh del token
+                if (fetchResponse.status === 401 && retryCount === 0) {
+                  console.log('🔄 [ACTIVIDAD] Token expirado (401), intentando refresh...');
+                  const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                  
+                  try {
+                    const refreshToken = await RefreshTokenService.getRefreshToken();
+                    if (!refreshToken) {
+                      throw new Error('No hay refresh token disponible. Por favor, inicia sesión nuevamente.');
+                    }
+                    
+                    const newToken = await RefreshTokenService.refreshAccessToken();
+                    if (newToken) {
+                      console.log('✅ [ACTIVIDAD] Token renovado exitosamente');
+                      
+                      // Actualizar el token en AsyncStorage y apiClient
+                      const { setAuthToken } = require('../src/services/api');
+                      setAuthToken(newToken);
+                      const AsyncStorage = require('../src/utils/storage').default;
+                      await AsyncStorage.setItem('auth_token', newToken);
+                      
+                      // Reintentar con el nuevo token (el FormData se recreará en el retry)
+                      return uploadWithRetry(1);
+                    } else {
+                      throw new Error('No se pudo obtener un nuevo token después del refresh');
+                    }
+                  } catch (refreshError: any) {
+                    console.error('❌ [ACTIVIDAD] Error al refrescar token:', refreshError);
+                    const errorText = await fetchResponse.text();
+                    throw new Error(`Error al renovar la sesión: ${refreshError?.message || 'Error desconocido'}. Por favor, inicia sesión nuevamente.`);
+                  }
+                }
+                
+                return fetchResponse;
+              };
               
-              console.log('🔑 [ACTIVIDAD] Token disponible para imagen procesada, longitud:', currentToken.length);
-              
-              const fetchResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
-                method: 'POST',
-                body: formDataArray[i],
-                headers: {
-                  'Authorization': `Bearer ${currentToken}`,
-                  // NO incluir Content-Type - fetch lo establecerá automáticamente
-                },
-              });
-              
-              console.log('📡 [ACTIVIDAD] Response status para imagen procesada:', fetchResponse.status);
+              const fetchResponse = await uploadWithRetry(0);
               
               if (!fetchResponse.ok) {
                 const errorText = await fetchResponse.text();
-                console.error('❌ [ACTIVIDAD] Error response para imagen procesada:', errorText);
-                
-                // Si es 401, el token puede estar expirado
-                if (fetchResponse.status === 401) {
-                  console.log('🔄 [ACTIVIDAD] Token expirado para imagen procesada, intentando refresh...');
-                  try {
-                    const RefreshTokenService = require('../src/services/refreshTokenService').default;
-                    const newToken = await RefreshTokenService.refreshAccessToken();
-                    if (newToken) {
-                      console.log('✅ [ACTIVIDAD] Token renovado, reintentando upload para imagen procesada...');
-                      const retryResponse = await fetch(`${API_FULL_URL}/upload/s3/image`, {
-                        method: 'POST',
-                        body: formDataArray[i],
-                        headers: {
-                          'Authorization': `Bearer ${newToken}`,
-                        },
-                      });
-                      
-                      if (!retryResponse.ok) {
-                        const retryErrorText = await retryResponse.text();
-                        throw new Error(`Error ${retryResponse.status}: ${retryErrorText}`);
-                      }
-                      
-                      responseData = await retryResponse.json();
-                      console.log('✅ [ACTIVIDAD] Imagen procesada subida con fetch después de refresh:', responseData);
-                    } else {
-                      throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
-                    }
-                  } catch (refreshError) {
-                    console.error('❌ [ACTIVIDAD] Error refrescando token para imagen procesada:', refreshError);
-                    throw new Error(`Error de autenticación: ${errorText}`);
-                  }
-                } else {
-                  throw new Error(`Error ${fetchResponse.status}: ${errorText}`);
-                }
-              } else {
-                responseData = await fetchResponse.json();
+                console.error(`❌ [ACTIVIDAD] Error del servidor (${fetchResponse.status}):`, errorText);
+                throw new Error(`Error al subir la imagen procesada: ${fetchResponse.status} ${fetchResponse.statusText}`);
+              }
+              
+              const rawResponseText = await fetchResponse.text();
+              try {
+                responseData = JSON.parse(rawResponseText);
                 console.log('✅ [ACTIVIDAD] Imagen procesada subida con fetch:', responseData);
+              } catch (jsonError: any) {
+                console.error('❌ [ACTIVIDAD] Error al parsear JSON:', jsonError);
+                console.error('❌ [ACTIVIDAD] Respuesta raw:', rawResponseText);
+                throw new Error(`Error al procesar la respuesta del servidor: ${jsonError.message}`);
               }
             } else {
               // iOS - usar apiClient
@@ -992,44 +1179,286 @@ const ActividadScreen = ({ onOpenNotifications, onOpenMenu }: { onOpenNotificati
           const startTime = Date.now();
           try {
             const video = validVideos[i];
+            
+            // Validar que el video tenga las propiedades necesarias
+            if (!video || !video.uri) {
+              console.error(`❌ [ACTIVIDAD] Video ${i + 1} no tiene URI válida`);
+              throw new Error(`El video ${i + 1} no es válido. Por favor, selecciónalo nuevamente.`);
+            }
+            
             const videoSizeMB = video.fileSize ? (video.fileSize / (1024 * 1024)).toFixed(2) : 'desconocido';
             const videoDuration = video.duration ? (video.duration / 1000).toFixed(1) : 'desconocido';
             
             console.log(`📤 [ACTIVIDAD] Subiendo video ${i + 1}/${formDataArray.length}`);
             console.log(`📊 [ACTIVIDAD] Video info: ${videoSizeMB}MB, ${videoDuration}s`);
+            console.log(`📊 [ACTIVIDAD] Video URI: ${video.uri.substring(0, 50)}...`);
+            console.log(`📊 [ACTIVIDAD] Video type: ${video.type || 'desconocido'}`);
             console.log(`⏱️ [ACTIVIDAD] Timeout configurado: 300000ms (5 minutos)`);
 
-            // Usar apiClient para que el interceptor maneje el refresh del token
-            // axios maneja automáticamente el Content-Type para FormData
-            const response = await apiClient.post('/upload/s3/video', formDataArray[i], {
-              timeout: 300000, // 5 minutos (300 segundos) para videos grandes
-            });
+            // Validar que el FormData tenga el campo 'video'
+            const formData = formDataArray[i];
+            if (!formData) {
+              console.error(`❌ [ACTIVIDAD] FormData ${i + 1} no está definido`);
+              throw new Error(`Error al preparar el video ${i + 1} para subir. Por favor, intenta nuevamente.`);
+            }
 
+            // Verificar que formData sea una instancia de FormData
+            if (!(formData instanceof FormData) && !formData.append) {
+              console.error(`❌ [ACTIVIDAD] FormData ${i + 1} no es una instancia válida de FormData`);
+              throw new Error(`Error al preparar el video ${i + 1} para subir. Por favor, intenta nuevamente.`);
+            }
+
+            console.log(`📤 [ACTIVIDAD] FormData preparado, enviando a /upload/s3/video`);
+            console.log(`📤 [ACTIVIDAD] FormData es instancia de FormData: ${formData instanceof FormData}`);
+
+            // Usar fetch directamente en lugar de axios para videos
+            // React Native maneja mejor FormData con fetch, evitando el error "multipart != application/x-www-form-urlencoded"
+            const uploadUrl = `${API_FULL_URL}/upload/s3/video`;
+            
+            console.log(`📤 [ACTIVIDAD] URL de upload: ${uploadUrl}`);
+            console.log(`📤 [ACTIVIDAD] Token disponible: ${token ? 'Sí' : 'No'}`);
+            
+            // Función auxiliar para obtener el token actual
+            const getAuthToken = async (): Promise<string> => {
+              const RefreshTokenService = require('../src/services/refreshTokenService').default;
+              let authToken = token;
+              
+              console.log(`🔑 [ACTIVIDAD] Obteniendo token - token del contexto: ${authToken ? 'Sí' : 'No'}`);
+              
+              if (!authToken) {
+                console.log('🔑 [ACTIVIDAD] Token del contexto no disponible, obteniendo de AsyncStorage...');
+                authToken = await RefreshTokenService.getAccessToken();
+              }
+              
+              if (!authToken) {
+                console.error('❌ [ACTIVIDAD] No hay token disponible ni en contexto ni en AsyncStorage');
+                throw new Error('No hay token de autenticación disponible. Por favor, inicia sesión nuevamente.');
+              }
+              
+              // Verificar si el token está próximo a expirar (5 minutos antes)
+              const isExpiringSoon = await RefreshTokenService.isTokenExpiringSoon();
+              if (isExpiringSoon) {
+                console.log('⚠️ [ACTIVIDAD] Token próximo a expirar, refrescando preventivamente...');
+                try {
+                  authToken = await RefreshTokenService.refreshAccessToken();
+                  console.log('✅ [ACTIVIDAD] Token refrescado preventivamente');
+                } catch (refreshError: any) {
+                  console.warn('⚠️ [ACTIVIDAD] No se pudo refrescar preventivamente, usando token actual:', refreshError?.message);
+                  // Continuar con el token actual si el refresh preventivo falla
+                }
+              }
+              
+              console.log(`✅ [ACTIVIDAD] Token obtenido (primeros 20 chars): ${authToken.substring(0, 20)}...`);
+              return authToken;
+            };
+            
+            // Función auxiliar para hacer la petición con retry en caso de 401
+            // IMPORTANTE: formData no es reutilizable después de la primera petición
+            // Necesitamos recrearlo desde el video original si hacemos retry
+            const uploadWithRetry = async (retryCount = 0): Promise<Response> => {
+              const authToken = await getAuthToken();
+              
+              console.log(`📤 [ACTIVIDAD] Intentando subir video (intento ${retryCount + 1})`);
+              console.log(`📤 [ACTIVIDAD] Token (primeros 20 chars): ${authToken.substring(0, 20)}...`);
+              
+              // Si es un retry, recrear el FormData desde el video original
+              let formDataToUse = formData;
+              if (retryCount > 0) {
+                console.log('🔄 [ACTIVIDAD] Recreando FormData para retry...');
+                const { prepareVideoForUpload } = require('../src/services/activityVideoService');
+                formDataToUse = prepareVideoForUpload(video);
+              }
+              
+              const fetchResponse = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${authToken}`,
+                  // NO incluir Content-Type aquí - React Native lo establecerá automáticamente con multipart/form-data y boundary
+                },
+                body: formDataToUse,
+              });
+              
+              // Si recibimos 401 y no hemos reintentado, intentar refresh del token
+              if (fetchResponse.status === 401 && retryCount === 0) {
+                console.log('🔄 [ACTIVIDAD] Token expirado (401), intentando refresh...');
+                const RefreshTokenService = require('../src/services/refreshTokenService').default;
+                
+                try {
+                  // Verificar si hay refresh token disponible antes de intentar refresh
+                  const refreshToken = await RefreshTokenService.getRefreshToken();
+                  if (!refreshToken) {
+                    console.error('❌ [ACTIVIDAD] No hay refresh token disponible');
+                    throw new Error('No hay refresh token disponible. Por favor, inicia sesión nuevamente.');
+                  }
+                  
+                  console.log('🔄 [ACTIVIDAD] Refresh token encontrado, intentando renovar access token...');
+                  const newToken = await RefreshTokenService.refreshAccessToken();
+                  
+                  if (newToken) {
+                    console.log('✅ [ACTIVIDAD] Token renovado exitosamente');
+                    console.log('✅ [ACTIVIDAD] Nuevo token (primeros 20 chars):', newToken.substring(0, 20) + '...');
+                    
+                    // Actualizar el token en AsyncStorage (el contexto lo leerá en el próximo render)
+                    // También actualizar el token en apiClient para futuras peticiones
+                    const { setAuthToken } = require('../src/services/api');
+                    setAuthToken(newToken);
+                    
+                    // Guardar el token en AsyncStorage con la misma key que usa el contexto
+                    const AsyncStorage = require('../src/utils/storage').default;
+                    await AsyncStorage.setItem('auth_token', newToken);
+                    
+                    console.log('✅ [ACTIVIDAD] Token actualizado en AsyncStorage y apiClient');
+                    
+                    // Reintentar con el nuevo token (el FormData se recreará en el retry)
+                    return uploadWithRetry(1);
+                  } else {
+                    throw new Error('No se pudo obtener un nuevo token después del refresh');
+                  }
+                } catch (refreshError: any) {
+                  console.error('❌ [ACTIVIDAD] Error completo al refrescar token:');
+                  console.error('❌ [ACTIVIDAD] Error message:', refreshError?.message);
+                  console.error('❌ [ACTIVIDAD] Error name:', refreshError?.name);
+                  console.error('❌ [ACTIVIDAD] Error stack:', refreshError?.stack);
+                  
+                  // Si el error es específico sobre el refresh token, mostrar mensaje más claro
+                  if (refreshError?.message?.includes('refresh token') || 
+                      refreshError?.message?.includes('No hay refresh token')) {
+                    throw new Error('Tu sesión ha expirado completamente. Por favor, inicia sesión nuevamente.');
+                  }
+                  
+                  throw new Error(`Error al renovar la sesión: ${refreshError?.message || 'Error desconocido'}. Por favor, inicia sesión nuevamente.`);
+                }
+              }
+              
+              return fetchResponse;
+            };
+            
+            // Hacer la petición con retry automático
+            const fetchResponse = await uploadWithRetry();
             const uploadTime = ((Date.now() - startTime) / 1000).toFixed(1);
-            console.log(`✅ [ACTIVIDAD] Video subido exitosamente en ${uploadTime}s:`, response.data);
-            uploadedMedia.push(response.data.videoKey);
+            
+            if (!fetchResponse.ok) {
+              let errorText = '';
+              try {
+                errorText = await fetchResponse.text();
+              } catch (e) {
+                errorText = 'No se pudo leer el mensaje de error';
+              }
+              console.error(`❌ [ACTIVIDAD] Error del servidor (${fetchResponse.status}):`, errorText);
+              
+              if (fetchResponse.status === 401) {
+                throw new Error('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+              }
+              
+              throw new Error(`Error al subir el video: ${fetchResponse.status} ${fetchResponse.statusText}`);
+            }
+            
+            // Parsear la respuesta JSON de forma segura
+            let responseData: any;
+            try {
+              const responseText = await fetchResponse.text();
+              console.log(`📦 [ACTIVIDAD] Respuesta raw (primeros 200 chars):`, responseText.substring(0, 200));
+              
+              if (!responseText || responseText.trim() === '') {
+                throw new Error('La respuesta del servidor está vacía');
+              }
+              
+              responseData = JSON.parse(responseText);
+            } catch (parseError: any) {
+              console.error('❌ [ACTIVIDAD] Error parseando respuesta JSON:', parseError);
+              console.error('❌ [ACTIVIDAD] Error message:', parseError?.message);
+              throw new Error(`Error al procesar la respuesta del servidor: ${parseError?.message || 'Respuesta inválida'}`);
+            }
+            
+            console.log(`✅ [ACTIVIDAD] Video subido exitosamente en ${uploadTime}s`);
+            console.log(`📦 [ACTIVIDAD] Respuesta completa:`, JSON.stringify(responseData, null, 2));
+            
+            // Validar que la respuesta sea exitosa
+            if (!responseData || typeof responseData !== 'object') {
+              console.error('❌ [ACTIVIDAD] Respuesta inválida del servidor');
+              console.error('❌ [ACTIVIDAD] responseData:', responseData);
+              throw new Error('El servidor no devolvió una respuesta válida. Por favor, intenta nuevamente.');
+            }
+            
+            // El servidor puede devolver videoKey en diferentes lugares
+            // Intentar obtenerlo de la respuesta de forma robusta
+            let videoKey: string | undefined;
+            
+            try {
+              videoKey = responseData?.videoKey || 
+                        responseData?.data?.videoKey || 
+                        (responseData?.data && typeof responseData.data === 'object' && responseData.data.videoKey);
+            } catch (accessError: any) {
+              console.error('❌ [ACTIVIDAD] Error accediendo a videoKey:', accessError);
+              console.error('❌ [ACTIVIDAD] responseData keys:', responseData ? Object.keys(responseData) : 'null');
+            }
+            
+            if (!videoKey) {
+              console.error('❌ [ACTIVIDAD] No se encontró videoKey en la respuesta');
+              console.error('❌ [ACTIVIDAD] Estructura de responseData:', responseData);
+              console.error('❌ [ACTIVIDAD] Tipo de responseData:', typeof responseData);
+              console.error('❌ [ACTIVIDAD] Keys en responseData:', responseData ? Object.keys(responseData) : 'responseData es null/undefined');
+              
+              // Si responseData.data existe, mostrar sus keys también
+              if (responseData?.data && typeof responseData.data === 'object') {
+                console.error('❌ [ACTIVIDAD] Keys en responseData.data:', Object.keys(responseData.data));
+              }
+              
+              throw new Error('El servidor no devolvió la clave del video. Por favor, intenta nuevamente.');
+            }
+            
+            console.log(`✅ [ACTIVIDAD] Video key obtenido: ${videoKey}`);
+            uploadedMedia.push(videoKey);
           } catch (error: any) {
             const uploadTime = Date.now() - startTime;
             
-            // Detectar si es un error de timeout
-            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout') || error.message?.includes('TIMEOUT')) {
+            // Log detallado del error para debug
+            console.error('❌ [ACTIVIDAD] Error al subir video:', error);
+            console.error('❌ [ACTIVIDAD] Error type:', typeof error);
+            console.error('❌ [ACTIVIDAD] Error message:', error?.message);
+            console.error('❌ [ACTIVIDAD] Error name:', error?.name);
+            console.error('❌ [ACTIVIDAD] Error stack:', error?.stack);
+            
+            // Detectar si es un error de timeout (fetch no tiene code, pero puede tener message)
+            if (error.message?.includes('timeout') || error.message?.includes('TIMEOUT') || error.name === 'AbortError') {
               console.error('⏱️ [ACTIVIDAD] ERROR DE TIMEOUT detectado');
               throw new Error(`El video es demasiado grande o la conexión es lenta (timeout después de ${(uploadTime / 1000).toFixed(1)}s). Por favor, intenta con un video más pequeño o verifica tu conexión a internet.`);
             }
             
-            // Detectar si es un error de red
-            if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error') || error.message?.includes('network')) {
+            // Detectar si es un error de red (con fetch, los errores de red son diferentes)
+            if (error.message?.includes('Network Error') || 
+                error.message?.includes('network') || 
+                error.message?.includes('Failed to fetch') ||
+                error.message?.includes('Network request failed')) {
               console.error('🌐 [ACTIVIDAD] ERROR DE RED detectado');
-              throw new Error('Error de conexión. Por favor, verifica tu conexión a internet e intenta nuevamente.');
+              console.error('🌐 [ACTIVIDAD] URI del video:', video?.uri);
+              
+              // Mensaje más específico para Android
+              if (Platform.OS === 'android' && video?.uri) {
+                if (video.uri.startsWith('content://')) {
+                  throw new Error('Error al acceder al video. Por favor, intenta seleccionar el video nuevamente desde la galería.');
+                } else if (video.uri.includes('rn_image_picker_lib_temp')) {
+                  throw new Error('El archivo temporal ya no está disponible. Por favor, selecciona el video nuevamente.');
+                } else {
+                  throw new Error('Error de conexión al subir el video. Por favor, verifica tu conexión a internet e intenta nuevamente.');
+                }
+              } else {
+                throw new Error('Error de conexión. Por favor, verifica tu conexión a internet e intenta nuevamente.');
+              }
             }
             
-            // Detectar errores del servidor
-            if (error.response?.status) {
-              console.error(`🔴 [ACTIVIDAD] Error del servidor: ${error.response.status}`);
-              throw new Error(`Error del servidor (${error.response.status}): ${error.response.data?.message || error.message || 'Error desconocido'}`);
+            // Si el error tiene un mensaje específico, usarlo
+            if (error.message) {
+              // Verificar si el mensaje menciona "video" - podría ser el error que vemos
+              if (error.message.includes("Property 'video' doesn't exist") || error.message.includes("video doesn't exist")) {
+                console.error('❌ [ACTIVIDAD] Error relacionado con propiedad video - probablemente error de parsing de respuesta');
+                throw new Error('Error al procesar la respuesta del servidor. El video puede haberse subido correctamente. Por favor, verifica si la actividad se creó correctamente.');
+              }
+              throw new Error(`Error al subir video: ${error.message}`);
             }
             
-            throw new Error(`Error al subir video: ${error.message || 'Error desconocido'}`);
+            // Error genérico
+            throw new Error(`Error al subir video: ${error?.toString() || 'Error desconocido'}`);
           }
         }
       }

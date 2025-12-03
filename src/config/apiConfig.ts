@@ -1,38 +1,41 @@
 import { Platform } from 'react-native';
+import Config from 'react-native-config';
 
-// Detectar si estamos en emulador o dispositivo físico
-const isEmulator = () => {
-  if (Platform.OS === 'android') {
-    // En Android, si estamos en emulador, usamos 10.0.2.2
-    // En dispositivo físico, usamos la IP del servidor
-    // Por ahora, usamos la IP de la red local para ambos casos
-    return false; // Cambiado para usar IP de red local
-  }
-  return false;
+type ApiEnv = 'local' | 'uat' | 'prod';
+
+// Elegir entorno a partir de variable de entorno o del modo (__DEV__)
+const API_ENV: ApiEnv =
+  (Config.API_ENV as ApiEnv) || (__DEV__ ? 'local' : 'prod');
+
+// Valores por defecto (se pueden sobreescribir desde .env)
+const API_BASE_URL_LOCAL =
+  Config.API_BASE_URL_LOCAL || 'http://192.168.68.113:3000';
+const API_BASE_URL_UAT =
+  Config.API_BASE_URL_UAT || 'https://uat-api.kiki.com.ar';
+const API_BASE_URL_PROD =
+  Config.API_BASE_URL_PROD || 'https://api.kiki.com.ar';
+
+const API_BASE_URLS: Record<ApiEnv, string> = {
+  local: API_BASE_URL_LOCAL,
+  uat: API_BASE_URL_UAT,
+  prod: API_BASE_URL_PROD,
 };
 
-// Configuración base del API
-export const getApiBaseUrlLoca = () => {
-  // Para desarrollo, usar la IP de la máquina de desarrollo
-  // En emulador Android: 10.0.2.2
-  // En emulador iOS: localhost
-  // En dispositivo físico: IP de la máquina de desarrollo
-  
-  if (Platform.OS === 'android') {
-    // Para emulador Android - usar 10.0.2.2 que es la IP del host desde el emulador
-    return __DEV__ ? 'http://192.168.68.113:3000' : 'https://api.kiki.com.ar';
-  } else if (Platform.OS === 'ios') {
-    // Para emulador iOS o dispositivo físico iOS
-    return __DEV__ ? 'http://192.168.68.113:3000' : 'https://api.kiki.com.ar';
-  }
-  
-  // Fallback
-  return __DEV__ ? 'http://192.168.68.113' : 'https://api.kiki.com.ar';
-};
-
-
-// Configuración base del API
+// Configuración base del API, en función del entorno
 export const getApiBaseUrl = () => {
+  // Si en algún caso necesitas tratar distinto Android/iOS (por ejemplo usar 10.0.2.2),
+  // puedes ramificar aquí usando Platform.OS, pero respetando siempre API_ENV.
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    return API_BASE_URLS[API_ENV];
+  }
+
+  // Fallback (otros plataformas)
+  return API_BASE_URLS[API_ENV];
+};
+
+
+// Configuración base del API
+export const getApiBaseUrlRemote = () => {
   // Para desarrollo, usar la IP de la máquina de desarrollo
   // En emulador Android: 10.0.2.2
   // En emulador iOS: localhost

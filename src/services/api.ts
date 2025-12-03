@@ -36,21 +36,38 @@ apiClient.interceptors.request.use(
                          config.data.append));
     
     if (isFormData) {
-      // Eliminar Content-Type para que axios lo establezca automáticamente con el boundary correcto
+      // CRÍTICO: En React Native, debemos eliminar completamente el Content-Type
+      // React Native maneja automáticamente el multipart/form-data con el boundary correcto
+      // Si dejamos cualquier Content-Type, React Native falla con "multipart != application/x-www-form-urlencoded"
       delete config.headers['Content-Type'];
       delete config.headers['content-type'];
+      delete config.headers['Content-type'];
+      
+      // También eliminar de headers comunes si existen
+      if (config.headers.common) {
+        delete config.headers.common['Content-Type'];
+        delete config.headers.common['content-type'];
+      }
+      
+      // Asegurar que no haya Content-Type en ningún lugar
+      Object.keys(config.headers).forEach(key => {
+        if (key.toLowerCase() === 'content-type') {
+          delete config.headers[key];
+        }
+      });
+      
+      console.log('📤 [API] FormData detectado - Content-Type eliminado completamente');
+      console.log('📤 [API] React Native establecerá automáticamente multipart/form-data con boundary');
       
       // Si es un endpoint de upload y no se especificó timeout, usar el timeout extendido
       const isUploadEndpoint = config.url?.includes('/upload/');
       if (isUploadEndpoint) {
         if (!config.timeout || config.timeout === API_TIMEOUT) {
           config.timeout = API_UPLOAD_TIMEOUT;
-          console.log(`📤 [API] FormData detectado en endpoint de upload, timeout extendido a ${API_UPLOAD_TIMEOUT}ms (${API_UPLOAD_TIMEOUT / 1000}s)`);
+          console.log(`📤 [API] Timeout extendido a ${API_UPLOAD_TIMEOUT}ms (${API_UPLOAD_TIMEOUT / 1000}s) para upload`);
         } else {
-          console.log(`📤 [API] FormData detectado en endpoint de upload, timeout personalizado: ${config.timeout}ms (${config.timeout / 1000}s)`);
+          console.log(`📤 [API] Timeout personalizado: ${config.timeout}ms (${config.timeout / 1000}s)`);
         }
-      } else {
-        console.log('📤 [API] FormData detectado, Content-Type será establecido automáticamente por axios');
       }
     }
     

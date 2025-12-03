@@ -4,11 +4,11 @@ class TestUtils {
   // Login rápido para tests
   static async login(email = 'test@example.com', password = 'password123') {
     try {
-      await expect(element(Selectors.loginScreen)).toBeVisible();
+      await expect(element(Selectors.loginScreen())).toBeVisible();
       
-      await element(Selectors.emailInput).typeText(email);
-      await element(Selectors.passwordInput).typeText(password);
-      await element(Selectors.loginButton).tap();
+      await element(Selectors.emailInput()).typeText(email);
+      await element(Selectors.passwordInput()).typeText(password);
+      await element(Selectors.loginButton()).tap();
       
       // Esperar a que se complete el login
       await this.waitForElement('home-screen', 10000);
@@ -33,7 +33,7 @@ class TestUtils {
       await element(by.text('Sí')).tap();
       
       // Esperar a volver a la pantalla de login
-      await expect(element(Selectors.loginScreen)).toBeVisible();
+      await expect(element(Selectors.loginScreen())).toBeVisible();
       
       console.log('Logout exitoso');
     } catch (error) {

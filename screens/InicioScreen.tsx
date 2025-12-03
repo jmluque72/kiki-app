@@ -8,7 +8,10 @@ import {
   RefreshControl,
   TouchableOpacity,
   Modal,
-  Alert
+  Alert,
+  Animated,
+  PanResponder,
+  Dimensions
 } from 'react-native';
 import { fonts } from '../src/config/fonts';
 import { useInstitution } from '../contexts/InstitutionContext';
@@ -20,6 +23,8 @@ import { getRoleDisplayName } from '../src/utils/roleTranslations';
 import ActivityDetailModal from '../components/ActivityDetailModal';
 import CustomCalendar from '../components/CustomCalendar';
 import { getFirstMedia, getMediaType } from '../src/utils/mediaUtils';
+import ActiveAssociationService from '../src/services/activeAssociationService';
+import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
 
 const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation }: { onOpenNotifications: () => void; onOpenMenu?: () => void; onOpenActiveAssociation?: () => void }) => {
   const { selectedInstitution, userAssociations, getActiveStudent } = useInstitution();
@@ -51,6 +56,14 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
   const [calendarVisible, setCalendarVisible] = React.useState(false);
   const [selectedDate, setSelectedDate] = React.useState<Date | null>(null);
   
+  // Estado para el slider de vista (solo para familyadmin y familyviewer)
+  const [viewMode, setViewMode] = React.useState<'actividades' | 'acciones'>('actividades');
+  const [sliderWidth, setSliderWidth] = React.useState(0);
+  
+  // Animación y gestos para el swipe
+  const swipeX = React.useRef(new Animated.Value(0)).current;
+  const SWIPE_THRESHOLD = 50; // Mínimo de píxeles para considerar un swipe
+  
   // Debug logs para ver qué institución se está usando
   console.log('🔍 [InicioScreen] effectiveInstitution:', effectiveInstitution ? {
     id: effectiveInstitution._id,
@@ -62,11 +75,119 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
     } : null
   } : null);
   
+  // VALIDACIÓN CRÍTICA: Usar SIEMPRE el estudiante de la asociación activa
+  // Esta es la fuente de verdad única - NO usar effectiveInstitution ni otras fuentes
+  const studentId = activeAssociation?.student?._id || null;
+  
+  // Obtener el rol del usuario para validar si requiere estudiante
+  const userRole = activeAssociation?.role?.nombre || user?.role?.nombre;
+  const requiresStudent = userRole === 'familyadmin' || userRole === 'familyviewer';
+  
+  // VALIDACIÓN: Si el rol requiere estudiante pero no lo tiene, es un error
+  if (activeAssociation && requiresStudent && !activeAssociation.student) {
+    console.error('❌ [InicioScreen] ERROR CRÍTICO: activeAssociation existe pero NO tiene estudiante!', {
+      activeAssociationId: activeAssociation._id,
+      account: activeAssociation.account?.nombre,
+      role: userRole
+    });
+  }
+  
+  // VALIDACIÓN: Si hay effectiveInstitution con estudiante diferente, es un problema
+  if (activeAssociation?.student?._id && effectiveInstitution?.student?._id) {
+    if (activeAssociation.student._id !== effectiveInstitution.student._id) {
+      console.warn('⚠️ [InicioScreen] INCONSISTENCIA DETECTADA:', {
+        activeAssociationStudent: {
+          id: activeAssociation.student._id,
+          nombre: activeAssociation.student.nombre
+        },
+        effectiveInstitutionStudent: {
+          id: effectiveInstitution.student._id,
+          nombre: effectiveInstitution.student.nombre
+        },
+        mensaje: 'activeAssociation y effectiveInstitution tienen estudiantes diferentes. Usando activeAssociation.'
+      });
+    }
+  }
+  
+  console.log('👤 [InicioScreen] StudentId para acciones diarias (VALIDADO):', {
+    studentIdFinal: studentId,
+    desdeActiveAssociation: activeAssociation?.student?._id,
+    activeAssociationStudent: activeAssociation?.student ? {
+      id: activeAssociation.student._id,
+      nombre: activeAssociation.student.nombre,
+      apellido: activeAssociation.student.apellido
+    } : null,
+    tieneActiveAssociation: !!activeAssociation,
+    tieneStudent: !!activeAssociation?.student
+  });
+  
   const { activities, loading, error, refetch } = useActivities(
-    effectiveInstitution?.account._id,
+    effectiveInstitution?.account?._id,
     effectiveInstitution?.division?._id,
-    selectedDate
+    selectedDate,
+    studentId
   );
+  
+  // VALIDACIÓN Y CORRECCIÓN AUTOMÁTICA: Detectar inconsistencias y corregirlas
+  React.useEffect(() => {
+    const checkAndFixActiveAssociation = async () => {
+      if (!activeAssociation) return;
+      
+      // Obtener el rol del usuario para validar si requiere estudiante
+      const userRole = activeAssociation?.role?.nombre || user?.role?.nombre;
+      const requiresStudent = userRole === 'familyadmin' || userRole === 'familyviewer';
+      
+      // Solo validar si el rol requiere estudiante
+      if (requiresStudent && !activeAssociation.student) {
+        console.error('❌ [InicioScreen] ERROR CRÍTICO: activeAssociation no tiene estudiante. Forzando actualización...');
+        const refreshed = await ActiveAssociationService.forceRefreshActiveAssociation();
+        if (refreshed && refreshed.student) {
+          console.log('✅ [InicioScreen] Asociación activa corregida desde backend');
+        }
+        return;
+      }
+      
+      // Si el studentId usado no coincide con el de activeAssociation, hay inconsistencia
+      const expectedStudentId = activeAssociation.student._id;
+      if (studentId && expectedStudentId && studentId !== expectedStudentId) {
+        console.error('❌ [InicioScreen] INCONSISTENCIA CRÍTICA DETECTADA:', {
+          activeAssociationStudentId: expectedStudentId,
+          studentIdUsado: studentId,
+          mensaje: 'Los IDs no coinciden. Forzando actualización desde backend...'
+        });
+        
+        const refreshed = await ActiveAssociationService.forceRefreshActiveAssociation();
+        if (refreshed && refreshed.student) {
+          console.log('✅ [InicioScreen] Asociación activa actualizada. Nuevo estudiante:', {
+            id: refreshed.student._id,
+            nombre: refreshed.student.nombre
+          });
+        }
+      }
+    };
+    
+    checkAndFixActiveAssociation();
+  }, [activeAssociation, studentId]);
+  
+  // Log para verificar las actividades cargadas
+  React.useEffect(() => {
+    console.log('📊 [InicioScreen] Actividades cargadas:', {
+      total: activities.length,
+      accionesDiarias: activities.filter(a => a.esAccionDiaria).length,
+      actividadesNormales: activities.filter(a => !a.esAccionDiaria).length,
+      studentIdUsado: studentId
+    });
+    activities.forEach((activity, index) => {
+      if (activity.esAccionDiaria) {
+        console.log(`✅ [InicioScreen] Acción diaria ${index + 1}:`, {
+          id: activity._id,
+          titulo: activity.titulo,
+          descripcion: activity.descripcion,
+          fechaAccion: activity.fechaAccion
+        });
+      }
+    });
+  }, [activities, studentId]);
   
   // Log para verificar qué se está pasando al hook
   React.useEffect(() => {
@@ -146,8 +267,128 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
     }
   };
 
-  const formatDate = (dateString: string) => {
+  // Función para obtener la primera letra de la categoría dentro de un círculo
+  // Para comida, usa el icono PNG
+  const getDailyActionIcon = (categoria: string, size: number = 35): React.ReactNode => {
+    // Si no hay categoría, usar "otros" por defecto
+    const cat = (categoria || 'otros').toLowerCase().trim();
+    
+    // Para comida, usar el icono PNG con tint azul y más grande
+    if (cat === 'comida') {
+      return (
+        <Image 
+          source={require('../assets/design/icons/comida.png')}
+          style={{ 
+            width: size * 1.6, 
+            height: size * 1.6,
+            tintColor: '#0E5FCE'
+          }}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Para dormir, usar el icono PNG con tint azul y más grande
+    if (cat === 'dormir') {
+      return (
+        <Image 
+          source={require('../assets/design/icons/dormir.png')}
+          style={{ 
+            width: size * 1.6, 
+            height: size * 1.6,
+            tintColor: '#0E5FCE'
+          }}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Para baño, usar el icono PNG con tint azul y más grande
+    if (cat === 'bano') {
+      return (
+        <Image 
+          source={require('../assets/design/icons/pis_caca.png')}
+          style={{ 
+            width: size * 1.6, 
+            height: size * 1.6,
+            tintColor: '#0E5FCE'
+          }}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Para emociones, usar el icono PNG con tint azul y más grande
+    if (cat === 'emociones') {
+      return (
+        <Image 
+          source={require('../assets/design/icons/emotions.png')}
+          style={{ 
+            width: size * 1.6, 
+            height: size * 1.6,
+            tintColor: '#0E5FCE'
+          }}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Para salud, usar el icono PNG con tint azul y más grande
+    if (cat === 'salud') {
+      return (
+        <Image 
+          source={require('../assets/design/icons/salud.png')}
+          style={{ 
+            width: size * 1.6, 
+            height: size * 1.6,
+            tintColor: '#0E5FCE'
+          }}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Para otros, usar el icono PNG con tint azul y más grande
+    if (cat === 'otros') {
+      return (
+        <Image 
+          source={require('../assets/design/icons/otros.png')}
+          style={{ 
+            width: size * 1.6, 
+            height: size * 1.6,
+            tintColor: '#0E5FCE'
+          }}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Si no coincide con ninguna categoría conocida, usar "otros" por defecto
+    return (
+      <Image 
+        source={require('../assets/design/icons/otros.png')}
+        style={{ 
+          width: size * 1.6, 
+          height: size * 1.6,
+          tintColor: '#0E5FCE'
+        }}
+        resizeMode="contain"
+      />
+    );
+  };
+
+  const formatDate = (dateString: string, includeTime: boolean = false) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
+    if (includeTime) {
+      return date.toLocaleString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
     return date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'long',
@@ -197,6 +438,93 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
     }
   };
 
+  // Determinar si mostrar el slider (solo para familyadmin y familyviewer)
+  const shouldShowSlider = () => {
+    const userRole = activeAssociation?.role?.nombre || user?.role?.nombre;
+    return userRole === 'familyadmin' || userRole === 'familyviewer';
+  };
+
+  // Separar actividades normales de acciones diarias
+  const normalActivities = React.useMemo(() => {
+    return activities.filter(a => !a.esAccionDiaria);
+  }, [activities]);
+
+  const dailyActions = React.useMemo(() => {
+    return activities.filter(a => a.esAccionDiaria);
+  }, [activities]);
+
+  // Obtener las actividades a mostrar según el modo de vista
+  const activitiesToShow = React.useMemo(() => {
+    if (!shouldShowSlider()) {
+      // Para otros roles, mostrar todas las actividades mezcladas
+      return activities;
+    }
+    // Para familyadmin y familyviewer, mostrar según el modo seleccionado
+    return viewMode === 'actividades' ? normalActivities : dailyActions;
+  }, [activities, viewMode, normalActivities, dailyActions]);
+
+  // Función para cambiar la vista con animación
+  const changeViewMode = React.useCallback((newMode: 'actividades' | 'acciones') => {
+    if (newMode === viewMode) return;
+    
+    // Animación del slider
+    Animated.spring(swipeX, {
+      toValue: newMode === 'actividades' ? 0 : 1,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+    
+    setViewMode(newMode);
+  }, [viewMode, swipeX]);
+
+  // Inicializar el valor del swipeX según el viewMode inicial
+  React.useEffect(() => {
+    swipeX.setValue(viewMode === 'actividades' ? 0 : 1);
+  }, []);
+
+  // PanResponder para detectar gestos de swipe
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => shouldShowSlider(),
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Solo responder si el movimiento es principalmente horizontal
+        return shouldShowSlider() && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (!shouldShowSlider()) return;
+
+        // Si el swipe es hacia la izquierda (dx negativo) y supera el umbral
+        if (gestureState.dx < -SWIPE_THRESHOLD && viewMode === 'actividades') {
+          changeViewMode('acciones');
+        }
+        // Si el swipe es hacia la derecha (dx positivo) y supera el umbral
+        else if (gestureState.dx > SWIPE_THRESHOLD && viewMode === 'acciones') {
+          changeViewMode('actividades');
+        }
+        
+        // Resetear la posición de la animación
+        Animated.spring(swipeX, {
+          toValue: viewMode === 'actividades' ? 0 : 1,
+          useNativeDriver: false,
+          tension: 100,
+          friction: 8,
+        }).start();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (!shouldShowSlider()) return;
+        
+        // Animar el slider mientras se mueve el dedo
+        const screenWidth = Dimensions.get('window').width;
+        const progress = gestureState.dx / screenWidth;
+        const currentValue = viewMode === 'actividades' ? 0 : 1;
+        const newValue = Math.max(0, Math.min(1, currentValue + progress));
+        
+        swipeX.setValue(newValue);
+      },
+    })
+  ).current;
+
   const getNoActivitiesMessage = () => {
     const userRole = user?.role?.nombre;
     const roleDisplayName = getRoleDisplayName(userRole || '');
@@ -206,6 +534,15 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
         ? `No hay actividades hoy en ${effectiveInstitution.division.nombre}`
         : 'No hay actividades hoy en la institución';
     } else if (userRole === 'familyadmin' || userRole === 'familyviewer') {
+      if (shouldShowSlider()) {
+        if (viewMode === 'actividades') {
+          return effectiveInstitution?.division 
+            ? `No hay actividades hoy para tu estudiante en ${effectiveInstitution.division.nombre}`
+            : 'No hay actividades hoy para tu estudiante';
+        } else {
+          return 'No hay acciones diarias registradas';
+        }
+      }
       return effectiveInstitution?.division 
         ? `No hay actividades hoy para tu estudiante en ${effectiveInstitution.division.nombre}`
         : 'No hay actividades hoy para tu estudiante';
@@ -305,8 +642,61 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
           )}
         </View>
 
+        {/* Slider para cambiar entre actividades y acciones diarias (solo para familyadmin y familyviewer) */}
+        {shouldShowSlider() && (
+          <View style={styles.sliderContainer}>
+            <View 
+              style={styles.sliderBackground}
+              onLayout={(event) => {
+                const width = event.nativeEvent.layout.width;
+                setSliderWidth(width);
+              }}
+            >
+              <TouchableOpacity
+                style={[styles.sliderOption]}
+                onPress={() => changeViewMode('actividades')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sliderOptionText, viewMode === 'actividades' && styles.sliderOptionTextActive]}>
+                  Actividades
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sliderOption]}
+                onPress={() => changeViewMode('acciones')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sliderOptionText, viewMode === 'acciones' && styles.sliderOptionTextActive]}>
+                  Acciones diarias
+                </Text>
+              </TouchableOpacity>
+              {sliderWidth > 0 && (
+                <Animated.View
+                  style={[
+                    styles.sliderIndicatorLine,
+                    {
+                      width: sliderWidth / 2, // Ancho de cada opción (50% del total)
+                      transform: [
+                        {
+                          translateX: swipeX.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, sliderWidth / 2], // Desde el inicio hasta la mitad
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Timeline de actividades */}
-        <View style={styles.timelineContainer}>
+        <Animated.View 
+          style={styles.timelineContainer}
+          {...panResponder.panHandlers}
+        >
           {loading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Cargando actividades...</Text>
@@ -315,7 +705,7 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>Error al cargar actividades</Text>
             </View>
-          ) : activities.length === 0 ? (
+          ) : activitiesToShow.length === 0 ? (
             <View style={styles.noActivitiesContainer}>
               <Text style={styles.noActivitiesText}>
                 {getNoActivitiesMessage()}
@@ -323,7 +713,7 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
             </View>
           ) : (
             <View style={styles.timelineTable}>
-              {activities.map((activity, index) => (
+              {activitiesToShow.map((activity, index) => (
                 <TouchableOpacity 
                   key={activity._id} 
                   style={styles.timelineRow}
@@ -331,12 +721,21 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
                   activeOpacity={0.6}
                 >
                   {/* Columna del ícono */}
-                  <View style={styles.iconColumn}>
-                    {/* Círculo en el top del border */}
-                    <View style={styles.borderCircle} />
+                  <View style={[styles.iconColumn, activity.esAccionDiaria && styles.iconColumnSmall]}>
+                    {/* Círculo en el top del border - Solo para actividades normales */}
+                    {!activity.esAccionDiaria && (
+                      <View style={styles.borderCircle} />
+                    )}
                     
                     {/* Mostrar primera imagen/video o ícono por defecto */}
-                    {(activity as any).imagenes && (activity as any).imagenes.length > 0 ? (
+                    {activity.esAccionDiaria ? (
+                      // Para acciones diarias, mostrar icono SVG según la categoría (sin círculo)
+                      <View style={styles.timelineImageContainer}>
+                        <View style={styles.placeholderContainerSmallNoBorder}>
+                          {getDailyActionIcon(activity.accion?.categoria || 'otros', 35)}
+                        </View>
+                      </View>
+                    ) : (activity as any).imagenes && (activity as any).imagenes.length > 0 ? (
                       (() => {
                         const firstMedia = getFirstMedia((activity as any).imagenes);
                         if (!firstMedia) {
@@ -375,8 +774,8 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
                                 resizeMode="cover"
                               />
                             )}
-                            {/* Contador de media múltiple */}
-                            {(activity as any).imagenes.length > 1 && (
+                            {/* Contador de media múltiple - Solo para actividades normales, nunca para acciones diarias */}
+                            {!activity.esAccionDiaria && (activity as any).imagenes && (activity as any).imagenes.length > 1 && (
                               <View style={styles.imageCountBadge}>
                                 <Text style={styles.imageCountText}>+{(activity as any).imagenes.length - 1}</Text>
                               </View>
@@ -400,14 +799,34 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
                   
                   {/* Columna del contenido */}
                   <View style={styles.contentColumn}>
-                    <Text style={styles.timelineTitle} numberOfLines={1}>
-                      {activity.titulo}
-                    </Text>
+                    {activity.esAccionDiaria ? (
+                      <View style={styles.timelineTitleContainer}>
+                        <Text style={styles.timelineTitle} numberOfLines={1}>
+                          {activity.accion?.nombre || activity.titulo || 'Acción diaria'}
+                        </Text>
+                        {activity.valor && (
+                          <Text style={styles.timelineValue} numberOfLines={1}>
+                            {activity.valor}
+                          </Text>
+                        )}
+                      </View>
+                    ) : (
+                      <Text style={styles.timelineTitle} numberOfLines={1}>
+                        {activity.titulo}
+                      </Text>
+                    )}
                     <Text style={styles.timelineDescription} numberOfLines={2}>
-                      {activity.descripcion}
+                      {activity.esAccionDiaria 
+                        ? (activity.comentarios || activity.descripcion || '')
+                        : activity.descripcion}
                     </Text>
                     <Text style={styles.timelineDate}>
-                      {formatDate(activity.createdAt)}
+                      {formatDate(
+                        activity.esAccionDiaria 
+                          ? (activity.fechaAccion || activity.createdAt) 
+                          : activity.createdAt,
+                        activity.esAccionDiaria
+                      )}
                     </Text>
                   </View>
                   
@@ -416,7 +835,7 @@ const InicioScreen = ({ onOpenNotifications, onOpenMenu, onOpenActiveAssociation
               ))}
             </View>
           )}
-        </View>
+        </Animated.View>
       </ScrollView>
       
       {/* Modal de detalles de actividad */}
@@ -475,16 +894,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   calendarIcon: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     borderRadius: 6,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    opacity: 0.7,
   },
   calendarIconImage: {
-    width: 32,
-    height: 32,
+    width: 24,
+    height: 24,
+    opacity: 0.8,
   },
   timelineContainer: {
     paddingHorizontal: 20,
@@ -509,6 +930,10 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: '#FF8C42',
     position: 'relative'
+  },
+  iconColumnSmall: {
+    width: 80,
+    height: 80,
   },
   contentColumn: {
     flex: 1,
@@ -550,9 +975,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  placeholderContainerSmall: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderContainerSmallNoBorder: {
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   placeholderLogo: {
     width: 70,
     height: 70,
+  },
+  placeholderLogoSmall: {
+    width: 45,
+    height: 45,
   },
   timelineImage: {
     width: 110,
@@ -626,15 +1069,57 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF8C42',
     borderWidth: 1,
     borderColor: '#FFFFFF',
+  },
+  borderCircleSmall: {
+    bottom: 50,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  dailyActionIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    zIndex: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
     zIndex: 10,
   },
+  dailyActionIndicatorSmall: {
+    top: 4,
+    right: 4,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
 
+  timelineTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
   timelineTitle: {
     fontSize: 16,
     fontFamily: fonts.bold,
     color: '#0E5FCE',
-    marginBottom: 4,
     lineHeight: 20,
+    marginRight: 6,
+  },
+  timelineValue: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: '#999999',
+    lineHeight: 18,
   },
   timelineDescription: {
     fontSize: 14,
@@ -829,6 +1314,45 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#FFFFFF',
   },
+  // Estilos para el slider
+  sliderContainer: {
+    marginHorizontal: 20,
+    marginBottom: 15,
+    marginTop: 5,
+    alignItems: 'center',
+  },
+  sliderBackground: {
+    flexDirection: 'row',
+    backgroundColor: 'transparent',
+    position: 'relative',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  sliderOption: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  sliderIndicatorLine: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    height: 3,
+    backgroundColor: '#0E5FCE',
+    borderRadius: 2,
+  },
+  sliderOptionText: {
+    fontSize: 15,
+    fontFamily: fonts.medium,
+    color: '#999999',
+  },
+  sliderOptionTextActive: {
+    color: '#0E5FCE',
+    fontFamily: fonts.bold,
+  },
 });
 
-export default withSideMenu(InicioScreen); 
+export default InicioScreen; 

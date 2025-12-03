@@ -2,6 +2,8 @@
  * Servicio para manejar la subida de videos de actividades
  */
 
+import { Platform } from 'react-native';
+
 /**
  * Prepara un video para subir a S3
  * @param video - Objeto de video con uri, type, etc.
@@ -11,7 +13,12 @@ export const prepareVideoForUpload = (video: any) => {
   const formData = new FormData();
   
   // Obtener el nombre del archivo de la URI
-  const fileName = video.uri.split('/').pop() || `activity-video-${Date.now()}.mp4`;
+  let fileName = video.fileName || video.uri.split('/').pop() || `activity-video-${Date.now()}.mp4`;
+  
+  // Limpiar el nombre del archivo (remover parámetros de query si existen)
+  if (fileName.includes('?')) {
+    fileName = fileName.split('?')[0];
+  }
   
   // Determinar el tipo MIME basado en la extensión o tipo del archivo
   let mimeType = 'video/mp4'; // Por defecto
@@ -23,21 +30,66 @@ export const prepareVideoForUpload = (video: any) => {
     mimeType = 'video/x-msvideo';
   } else if (fileName.includes('.webm')) {
     mimeType = 'video/webm';
+  } else if (fileName.includes('.mp4')) {
+    mimeType = 'video/mp4';
+  }
+  
+  // Normalizar URI para Android
+  let videoUri = video.uri;
+  if (Platform.OS === 'android') {
+    // Logging detallado para debug
+    console.log('📱 [ACTIVITY VIDEO] Android - Preparando video');
+    console.log('🔗 [ACTIVITY VIDEO] URI original:', videoUri);
+    console.log('📄 [ACTIVITY VIDEO] File name:', fileName);
+    console.log('🎬 [ACTIVITY VIDEO] MIME type:', mimeType);
+    console.log('📊 [ACTIVITY VIDEO] File size:', video.fileSize ? `${(video.fileSize / (1024 * 1024)).toFixed(2)}MB` : 'desconocido');
+    
+    // Verificar tipo de URI
+    if (videoUri.startsWith('content://')) {
+      console.log('⚠️ [ACTIVITY VIDEO] URI es content:// - FormData debería manejarlo');
+    } else if (videoUri.startsWith('file://')) {
+      console.log('✅ [ACTIVITY VIDEO] URI es file:// - debería funcionar correctamente');
+    } else {
+      console.log('⚠️ [ACTIVITY VIDEO] URI no tiene prefijo conocido, agregando file:// si es necesario');
+      // Si no tiene prefijo y parece un path absoluto, agregar file://
+      if (videoUri.startsWith('/')) {
+        videoUri = `file://${videoUri}`;
+        console.log('🔗 [ACTIVITY VIDEO] URI normalizada a:', videoUri);
+      }
+    }
   }
   
   // Agregar el video al FormData
+  // IMPORTANTE: En React Native, el objeto debe tener esta estructura exacta
   const videoFile = {
-    uri: video.uri,
+    uri: videoUri,
     type: mimeType,
     name: fileName,
   } as any;
   
-  formData.append('video', videoFile);
+  // Verificar que el FormData tenga el método append
+  if (typeof formData.append !== 'function') {
+    console.error('❌ [ACTIVITY VIDEO] FormData no tiene método append');
+    throw new Error('Error al preparar el FormData para el video');
+  }
   
+  try {
+    formData.append('video', videoFile);
+    console.log('✅ [ACTIVITY VIDEO] Video agregado al FormData con campo "video"');
+  } catch (appendError: any) {
+    console.error('❌ [ACTIVITY VIDEO] Error agregando video al FormData:', appendError);
+    throw new Error(`Error al preparar el video para subir: ${appendError.message}`);
+  }
+  
+  // Verificar que el campo se agregó correctamente (solo para debug)
+  // Nota: En React Native, FormData no tiene métodos para verificar contenido
   console.log('📹 [ACTIVITY VIDEO] Video preparado para subir:', {
     fileName,
     mimeType,
-    fileSize: video.fileSize
+    fileSize: video.fileSize ? `${(video.fileSize / (1024 * 1024)).toFixed(2)}MB` : 'desconocido',
+    uriType: videoUri.substring(0, 10) + '...',
+    platform: Platform.OS,
+    formDataField: 'video' // Confirmar que el campo se llama 'video'
   });
   
   return formData;

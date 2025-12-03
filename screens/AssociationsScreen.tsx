@@ -29,9 +29,11 @@ import { API_FULL_URL } from '../src/config/apiConfig';
 
 interface AssociationsScreenProps {
   onBack: () => void;
+  onOpenPerfil?: () => void;
 }
 
-const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack }) => {
+const AssociationsScreen: React.FC<AssociationsScreenProps> = ({ onBack, onOpenPerfil }) => {
+  console.log('🔍 [AssociationsScreen] onOpenPerfil recibido?', !!onOpenPerfil);
   const { user, activeAssociation, associations, refreshActiveAssociation, logout, token } = useAuth();
   const { userAssociations, setUserAssociations } = useInstitution();
 
@@ -647,11 +649,23 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontWeight: 'bold',
   },
+  perfilButton: {
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: '#0E5FCE',
+    marginLeft: 15,
+  },
+  perfilButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1F2937',
     flex: 1,
+    marginRight: 10,
   },
   content: {
     flex: 1,

@@ -2,18 +2,26 @@
   "preset": "react-native",
   "setupFilesAfterEnv": ["<rootDir>/init.js"],
   "testEnvironment": "node",
-  "reporters": ["detox/runners/jest/reporter"],
+  "reporters": ["default"],
   "verbose": true,
   "transform": {
-    "^.+\\.js$": "babel-jest"
+    "^.+\\.js$": "babel-jest",
+    "^.+\\.(ts|tsx)$": "babel-jest"
   },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(react-native|@react-native|@react-navigation|@aws-amplify|react-native-image-picker|react-native-image-resizer|react-native-video|react-native-webview|react-native-svg|react-native-camera-kit|react-native-push-notification|react-native-permissions|react-native-toast-message|react-native-gesture-handler|react-native-safe-area-context|react-native-screens|@react-native-async-storage|@react-native-community|@react-native-picker|expo-linear-gradient)/)"
+  ],
   "testMatch": ["**/*.e2e.js"],
-  "moduleFileExtensions": ["js", "jsx", "json"],
+  "moduleFileExtensions": ["js", "jsx", "json", "ts", "tsx"],
   "collectCoverage": false,
   "coveragePathIgnorePatterns": ["/node_modules/", "/e2e/"],
   "testPathIgnorePatterns": ["/node_modules/"],
   "haste": {
     "defaultPlatform": "ios",
     "platforms": ["ios", "android"]
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../src/$1",
+    "^@react-native/js-polyfills/error-guard$": "<rootDir>/mocks/error-guard.js"
   }
 }
