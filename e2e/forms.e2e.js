@@ -6,19 +6,7 @@ describe('Forms E2E Tests', () => {
   const FAMILYADMIN_EMAIL = 'familyadmin@test.com';
   const FAMILYADMIN_PASSWORD = 'password123';
 
-  beforeAll(async () => {
-    await device.launchApp({
-      permissions: {
-        camera: 'YES',
-        photos: 'YES',
-        notifications: 'YES',
-      },
-    });
-  });
-
-  beforeEach(async () => {
-    await device.reloadReactNative();
-  });
+  // beforeAll y beforeEach están en init.js (global)
 
   describe('Completar Formulario (Familyadmin)', () => {
     beforeEach(async () => {

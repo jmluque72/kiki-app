@@ -5,8 +5,7 @@ module.exports = {
     'ios.debug': {
       type: 'ios.app',
       binaryPath: 'ios/build/Build/Products/Debug-iphonesimulator/KikiApp.app',
-      build:
-        'xcodebuild -workspace ios/KikiApp.xcworkspace -scheme KikiApp -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build',
+      build: 'xcodebuild -workspace ios/KikiApp.xcworkspace -scheme KikiApp -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=NO',
     },
     'ios.release': {
       type: 'ios.app',
@@ -62,10 +61,13 @@ module.exports = {
   behavior: {
     init: {
       exposeGlobals: true,
-      reinstallApp: false,
+      reinstallApp: true, // Reinstalar app si es necesario
+      launchApp: 'auto', // Lanzar automáticamente
     },
     cleanup: {
       shutdownDevice: false,
+      stopApp: false,
+      terminateApp: false, // No terminar la app al finalizar (evita errores)
     },
   },
   artifacts: {

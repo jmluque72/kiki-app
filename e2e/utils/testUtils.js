@@ -1,17 +1,71 @@
+const { device, expect, element, by, waitFor } = require('detox');
 const { Selectors } = require('./selectors');
 
 class TestUtils {
   // Login rápido para tests
   static async login(email = 'test@example.com', password = 'password123') {
     try {
-      await expect(element(Selectors.loginScreen())).toBeVisible();
+      console.log('🔐 [TEST UTILS] Iniciando login...');
       
+      // Delay inicial
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log('🔍 [TEST UTILS] Buscando pantalla de login...');
+      await waitFor(element(Selectors.loginScreen()))
+        .toBeVisible()
+        .withTimeout(10000);
+      console.log('✅ [TEST UTILS] Pantalla de login encontrada');
+      
+      // Verificar inputs antes de escribir
+      console.log('🔍 [TEST UTILS] Verificando inputs...');
+      await waitFor(element(Selectors.emailInput()))
+        .toBeVisible()
+        .withTimeout(5000);
+      await waitFor(element(Selectors.passwordInput()))
+        .toBeVisible()
+        .withTimeout(5000);
+      console.log('✅ [TEST UTILS] Inputs verificados');
+      
+      console.log('⌨️ [TEST UTILS] Escribiendo credenciales...');
       await element(Selectors.emailInput()).typeText(email);
       await element(Selectors.passwordInput()).typeText(password);
-      await element(Selectors.loginButton()).tap();
+      console.log('✅ [TEST UTILS] Credenciales escritas');
       
-      // Esperar a que se complete el login
-      await this.waitForElement('home-screen', 10000);
+      // Verificar botón antes de hacer tap
+      console.log('🔍 [TEST UTILS] Verificando botón de login...');
+      await waitFor(element(Selectors.loginButton()))
+        .toBeVisible()
+        .withTimeout(5000);
+      console.log('✅ [TEST UTILS] Botón verificado');
+      
+      // Delay antes de tap
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('👆 [TEST UTILS] Haciendo tap en botón de login...');
+      await element(Selectors.loginButton()).tap();
+      console.log('✅ [TEST UTILS] Tap realizado');
+      
+      // Esperar a que se complete el login (puede ir a account-selection o home)
+      try {
+        await waitFor(element(by.id('account-selection-screen')))
+          .toBeVisible()
+          .withTimeout(3000);
+        // Si hay selector de cuenta, seleccionar la primera
+        await element(by.id('account-item-0')).tap();
+      } catch (error) {
+        // No hay selector de cuenta, continuar
+      }
+      
+      // Esperar a que aparezca la pantalla principal
+      await waitFor(element(by.id('home-screen')))
+        .toBeVisible()
+        .withTimeout(10000)
+        .catch(async () => {
+          // Alternativa: buscar por tab
+          await waitFor(element(by.id('tab-inicio')))
+            .toBeVisible()
+            .withTimeout(5000);
+        });
       
       console.log(`Login exitoso para: ${email}`);
     } catch (error) {
@@ -185,6 +239,27 @@ class TestUtils {
       console.log('Permisos configurados:', permissions);
     } catch (error) {
       console.error('Error al configurar permisos:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Termina la app de forma segura, ignorando errores si la app no está corriendo
+   */
+  static async terminateAppSafely() {
+    try {
+      await device.terminateApp();
+    } catch (error) {
+      // Ignorar errores de terminación si la app no está corriendo
+      if (error.message && (
+        error.message.includes('found nothing to terminate') ||
+        error.message.includes('failed to terminate') ||
+        error.code === 3
+      )) {
+        console.log('⚠️ [TERMINATE] App no estaba corriendo (esto es normal)');
+        return;
+      }
+      // Re-lanzar otros errores
       throw error;
     }
   }

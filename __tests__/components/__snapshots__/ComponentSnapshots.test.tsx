@@ -1,15 +1,17 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { ThemeProvider } from '../../src/contexts/ThemeContext';
+import { ThemeProvider } from '../../contexts/ThemeContext';
 import { ActivityCard } from '../../src/components/ActivityCard';
 import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
 import { Activity } from '../../src/types/activity';
 
+import { vi } from 'vitest';
+
 // Mock de dependencias
-jest.mock('../../src/services/mediaService', () => ({
+vi.mock('../../src/services/mediaService', () => ({
   mediaService: {
-    getMediaUrl: jest.fn((filename) => `https://mock-url.com/${filename}`),
+    getMediaUrl: vi.fn((filename) => `https://mock-url.com/${filename}`),
   },
 }));
 
@@ -39,10 +41,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={mockActivity}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user1"
             />
           </ThemeProvider>
@@ -59,10 +61,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={virtualActivity}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user1"
             />
           </ThemeProvider>
@@ -78,10 +80,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={mockActivity}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user1" // user1 está en attendees
             />
           </ThemeProvider>
@@ -97,10 +99,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={mockActivity}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user999" // user999 no está en attendees
             />
           </ThemeProvider>
@@ -116,10 +118,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={mockActivity}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user1"
               isLoading={true}
             />
@@ -141,10 +143,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={mockActivity}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user1"
               customStyles={customStyles}
             />
@@ -162,10 +164,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={activityWithoutImages}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user1"
             />
           </ThemeProvider>
@@ -187,10 +189,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={activityWithManyAttendees}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user1"
             />
           </ThemeProvider>
@@ -212,10 +214,10 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <ActivityCard
               activity={fullActivity}
-              onPress={jest.fn()}
-              onEdit={jest.fn()}
-              onDelete={jest.fn()}
-              onAttend={jest.fn()}
+              onPress={vi.fn()}
+              onEdit={vi.fn()}
+              onDelete={vi.fn()}
+              onAttend={vi.fn()}
               currentUserId="user999" // No inscrito
             />
           </ThemeProvider>
@@ -231,7 +233,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} variant="primary" />
+            <Button title="Click me" onPress={vi.fn()} variant="primary" />
           </ThemeProvider>
         )
         .toJSON();
@@ -243,7 +245,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} variant="secondary" />
+            <Button title="Click me" onPress={vi.fn()} variant="secondary" />
           </ThemeProvider>
         )
         .toJSON();
@@ -255,7 +257,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} disabled={true} />
+            <Button title="Click me" onPress={vi.fn()} disabled={true} />
           </ThemeProvider>
         )
         .toJSON();
@@ -267,7 +269,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} loading={true} />
+            <Button title="Click me" onPress={vi.fn()} loading={true} />
           </ThemeProvider>
         )
         .toJSON();
@@ -281,7 +283,7 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <Button
               title="Click me"
-              onPress={jest.fn()}
+              onPress={vi.fn()}
               icon="heart"
               iconPosition="left"
             />
@@ -296,7 +298,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} size="small" />
+            <Button title="Click me" onPress={vi.fn()} size="small" />
           </ThemeProvider>
         )
         .toJSON();
@@ -308,7 +310,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} size="large" />
+            <Button title="Click me" onPress={vi.fn()} size="large" />
           </ThemeProvider>
         )
         .toJSON();
@@ -320,7 +322,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} variant="outline" />
+            <Button title="Click me" onPress={vi.fn()} variant="outline" />
           </ThemeProvider>
         )
         .toJSON();
@@ -332,7 +334,7 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider>
-            <Button title="Click me" onPress={jest.fn()} rounded={true} />
+            <Button title="Click me" onPress={vi.fn()} rounded={true} />
           </ThemeProvider>
         )
         .toJSON();
@@ -349,7 +351,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
             />
           </ThemeProvider>
         )
@@ -365,7 +367,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value="Hello World"
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
             />
           </ThemeProvider>
         )
@@ -382,7 +384,7 @@ describe('Snapshot Tests', () => {
               label="Username"
               placeholder="Enter username"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
             />
           </ThemeProvider>
         )
@@ -398,7 +400,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               error="This field is required"
             />
           </ThemeProvider>
@@ -415,7 +417,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               disabled={true}
             />
           </ThemeProvider>
@@ -432,7 +434,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter password"
               value="password123"
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               secureTextEntry={true}
             />
           </ThemeProvider>
@@ -449,7 +451,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               leftIcon="user"
             />
           </ThemeProvider>
@@ -466,7 +468,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               multiline={true}
               numberOfLines={4}
             />
@@ -484,7 +486,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Small"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               size="small"
             />
           </ThemeProvider>
@@ -497,7 +499,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Large"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               size="large"
             />
           </ThemeProvider>
@@ -515,7 +517,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               rounded={true}
             />
           </ThemeProvider>
@@ -532,7 +534,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Enter text"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               backgroundColor="#f0f0f0"
             />
           </ThemeProvider>
@@ -548,8 +550,8 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider theme="light">
-            <Button title="Button" onPress={jest.fn()} />
-            <Input placeholder="Input" value="" onChangeText={jest.fn()} />
+            <Button title="Button" onPress={vi.fn()} />
+            <Input placeholder="Input" value="" onChangeText={vi.fn()} />
           </ThemeProvider>
         )
         .toJSON();
@@ -561,8 +563,8 @@ describe('Snapshot Tests', () => {
       const tree = renderer
         .create(
           <ThemeProvider theme="dark">
-            <Button title="Button" onPress={jest.fn()} />
-            <Input placeholder="Input" value="" onChangeText={jest.fn()} />
+            <Button title="Button" onPress={vi.fn()} />
+            <Input placeholder="Input" value="" onChangeText={vi.fn()} />
           </ThemeProvider>
         )
         .toJSON();
@@ -578,7 +580,7 @@ describe('Snapshot Tests', () => {
           <ThemeProvider>
             <Button
               title="Loading"
-              onPress={jest.fn()}
+              onPress={vi.fn()}
               loading={true}
               animation="pulse"
             />
@@ -596,7 +598,7 @@ describe('Snapshot Tests', () => {
             <Input
               placeholder="Input"
               value=""
-              onChangeText={jest.fn()}
+              onChangeText={vi.fn()}
               error="Error message"
               errorAnimation="shake"
             />

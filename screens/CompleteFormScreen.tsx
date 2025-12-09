@@ -287,12 +287,16 @@ const CompleteFormScreen: React.FC<CompleteFormScreenProps> = ({ formRequest, on
 
   const handleSelectImage = async (preguntaId: string) => {
     try {
+      console.log('📷 [FORM] Iniciando selección de imagen para pregunta:', preguntaId);
+      
+      // Verificar permisos, pero no bloquear si falla - react-native-image-picker puede manejarlo
       const hasPermission = await checkImagePermissions();
-      if (!hasPermission) {
-        return;
-      }
-
-      // Abrir directamente la galería sin mostrar opciones
+      console.log('📷 [FORM] Permiso verificado:', hasPermission);
+      
+      // Intentar abrir la galería de todas formas
+      // react-native-image-picker puede manejar los permisos internamente en algunos casos
+      console.log('📷 [FORM] Abriendo galería de imágenes...');
+      
       launchImageLibrary(
         {
           mediaType: 'photo' as MediaType,
@@ -302,13 +306,29 @@ const CompleteFormScreen: React.FC<CompleteFormScreenProps> = ({ formRequest, on
           quality: 0.8,
         },
         async (response: ImagePickerResponse) => {
-          if (response.didCancel || response.errorCode) {
+          console.log('📷 [FORM] Respuesta del selector:', {
+            didCancel: response.didCancel,
+            errorCode: response.errorCode,
+            errorMessage: response.errorMessage,
+            hasAssets: !!response.assets?.length
+          });
+          
+          if (response.didCancel) {
+            console.log('📷 [FORM] Usuario canceló la selección');
             return;
           }
+          
+          if (response.errorCode) {
+            console.error('📷 [FORM] Error en selector:', response.errorCode, response.errorMessage);
+            toastService.error(`Error al seleccionar imagen: ${response.errorMessage || response.errorCode}`);
+            return;
+          }
+          
           if (response.assets && response.assets[0]) {
             const asset = response.assets[0];
             if (asset.uri) {
               try {
+                console.log('📷 [FORM] Imagen seleccionada, iniciando upload...');
                 setSaving(true);
                 const fileKey = await uploadFileToS3(
                   asset.uri,
@@ -317,18 +337,21 @@ const CompleteFormScreen: React.FC<CompleteFormScreenProps> = ({ formRequest, on
                 );
                 handleResponseChange(preguntaId, fileKey);
                 toastService.success('Imagen subida exitosamente');
+                console.log('✅ [FORM] Imagen subida exitosamente:', fileKey);
               } catch (error: any) {
-                console.error('Error subiendo imagen:', error);
+                console.error('❌ [FORM] Error subiendo imagen:', error);
                 toastService.error('Error al subir la imagen');
               } finally {
                 setSaving(false);
               }
             }
+          } else {
+            console.warn('⚠️ [FORM] No se seleccionó ninguna imagen');
           }
         }
       );
     } catch (error: any) {
-      console.error('Error seleccionando imagen:', error);
+      console.error('❌ [FORM] Error seleccionando imagen:', error);
       toastService.error('Error al seleccionar imagen');
     }
   };

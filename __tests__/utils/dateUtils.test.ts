@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import {
   formatDate,
   formatTime,
@@ -119,12 +120,12 @@ describe('dateUtils', () => {
 
   describe('getRelativeTime', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2024-01-15T12:00:00'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2024-01-15T12:00:00'));
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('debe mostrar "ahora mismo" para tiempo actual', () => {
@@ -291,12 +292,12 @@ describe('dateUtils', () => {
 
   describe('isToday', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2024-01-15T12:00:00'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2024-01-15T12:00:00'));
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('debe identificar hoy', () => {
@@ -312,12 +313,12 @@ describe('dateUtils', () => {
 
   describe('isFutureDate', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2024-01-15T12:00:00'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2024-01-15T12:00:00'));
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('debe identificar fecha futura', () => {
@@ -338,12 +339,12 @@ describe('dateUtils', () => {
 
   describe('isPastDate', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2024-01-15T12:00:00'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2024-01-15T12:00:00'));
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('debe identificar fecha pasada', () => {

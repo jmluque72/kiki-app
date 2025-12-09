@@ -1,11 +1,12 @@
+import { vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react-hooks';
 import { useApiError } from '../../src/hooks/useApiError';
 import { Alert } from 'react-native';
 
 // Mock de Alert
-jest.mock('react-native', () => ({
+vi.mock('react-native', () => ({
   Alert: {
-    alert: jest.fn(),
+    alert: vi.fn(),
   },
   Platform: {
     OS: 'ios',
@@ -14,7 +15,7 @@ jest.mock('react-native', () => ({
 
 describe('useApiError', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('debe manejar errores de red correctamente', () => {
@@ -90,7 +91,7 @@ describe('useApiError', () => {
 
   it('debe proporcionar botón de reintento cuando se proporciona callback', () => {
     const { result } = renderHook(() => useApiError());
-    const retryCallback = jest.fn();
+    const retryCallback = vi.fn();
     
     const error = new Error('Network request failed');
     
@@ -110,7 +111,7 @@ describe('useApiError', () => {
 
   it('debe ejecutar callback de reintento cuando se presiona el botón', () => {
     const { result } = renderHook(() => useApiError());
-    const retryCallback = jest.fn();
+    const retryCallback = vi.fn();
     
     const error = new Error('Network request failed');
     
@@ -119,7 +120,7 @@ describe('useApiError', () => {
     });
 
     // Obtener los botones pasados a Alert.alert
-    const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
+    const alertCall = (Alert.alert as any).mock.calls[0];
     const buttons = alertCall[2];
     
     // Simular presionar el botón de reintento

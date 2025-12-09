@@ -3,31 +3,98 @@ const { TestUtils } = require('./utils/testUtils');
 const { Selectors } = require('./utils/selectors');
 
 describe('Authentication E2E Tests', () => {
-  beforeAll(async () => {
-    await device.launchApp({
-      permissions: {
-        camera: 'YES',
-        photos: 'YES',
-        notifications: 'YES',
-      },
-    });
-  });
-
-  beforeEach(async () => {
-    await device.reloadReactNative();
-  });
+  // beforeAll y beforeEach están en init.js (global)
 
   describe('Login Flow', () => {
     it('should login successfully with valid credentials', async () => {
-      // Verificar que estamos en la pantalla de login
-      await expect(element(Selectors.loginScreen())).toBeVisible();
+      // Forzar que los logs se muestren inmediatamente
+      process.stdout.write('\n🧪 ============================================\n');
+      process.stdout.write('🧪 [TEST] INICIANDO TEST: should login successfully\n');
+      process.stdout.write('🧪 ============================================\n\n');
+      
+      // Delay inicial para asegurar que la UI esté completamente cargada
+      process.stdout.write('⏳ [TEST] Esperando 3 segundos iniciales...\n');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      process.stdout.write('✅ [TEST] Delay completado\n\n');
+      
+      // Intentar tomar screenshot para debugging
+      try {
+        await device.takeScreenshot('test-start');
+        process.stdout.write('📸 [TEST] Screenshot tomado: test-start\n');
+      } catch (e) {
+        process.stdout.write('⚠️ [TEST] No se pudo tomar screenshot\n');
+      }
+      
+      // Esperar a que la pantalla de login esté visible
+      process.stdout.write('🔍 [TEST] Buscando pantalla de login (testID: login-screen)...\n');
+      try {
+        await waitFor(element(Selectors.loginScreen()))
+          .toBeVisible()
+          .withTimeout(15000);
+        process.stdout.write('✅ [TEST] Pantalla de login encontrada y visible\n');
+      } catch (error) {
+        process.stdout.write(`❌ [TEST] Error al encontrar pantalla de login: ${error.message}\n`);
+        // Intentar buscar por texto alternativo
+        process.stdout.write('🔍 [TEST] Intentando buscar por texto "KIKI"...\n');
+        try {
+          await waitFor(element(by.text('KIKI')))
+            .toBeVisible()
+            .withTimeout(10000);
+          process.stdout.write('✅ [TEST] Logo encontrado, continuando...\n');
+        } catch (e2) {
+          process.stdout.write(`❌ [TEST] Tampoco se encontró el logo: ${e2.message}\n`);
+          // Intentar buscar cualquier texto visible
+          process.stdout.write('🔍 [TEST] Intentando buscar cualquier elemento visible...\n');
+          throw error;
+        }
+      }
+      
+      // Esperar a que los inputs estén listos
+      console.log('🔍 [TEST] Buscando campo de email...');
+      await waitFor(element(Selectors.emailInput()))
+        .toBeVisible()
+        .withTimeout(5000);
+      console.log('✅ [TEST] Campo de email encontrado');
+      
+      // Verificar que el input es interactuable
+      console.log('🔍 [TEST] Verificando que el input de email es interactuable...');
+      await expect(element(Selectors.emailInput())).toBeVisible();
+      console.log('✅ [TEST] Input de email es interactuable');
       
       // Ingresar credenciales válidas
+      console.log('⌨️ [TEST] Escribiendo email...');
       await element(Selectors.emailInput()).typeText('test@example.com');
-      await element(Selectors.passwordInput()).typeText('password123');
+      console.log('✅ [TEST] Email escrito');
       
-      // Presionar botón de login
+      console.log('🔍 [TEST] Buscando campo de contraseña...');
+      await waitFor(element(Selectors.passwordInput()))
+        .toBeVisible()
+        .withTimeout(5000);
+      console.log('✅ [TEST] Campo de contraseña encontrado');
+      
+      console.log('⌨️ [TEST] Escribiendo contraseña...');
+      await element(Selectors.passwordInput()).typeText('password123');
+      console.log('✅ [TEST] Contraseña escrita');
+      
+      // Esperar a que el botón esté visible y presionarlo
+      console.log('🔍 [TEST] Buscando botón de login...');
+      await waitFor(element(Selectors.loginButton()))
+        .toBeVisible()
+        .withTimeout(5000);
+      console.log('✅ [TEST] Botón de login encontrado');
+      
+      // Verificar que el botón es interactuable
+      console.log('🔍 [TEST] Verificando que el botón es interactuable...');
+      await expect(element(Selectors.loginButton())).toBeVisible();
+      console.log('✅ [TEST] Botón es interactuable');
+      
+      // Pequeño delay antes de hacer tap
+      console.log('⏳ [TEST] Esperando 500ms antes de hacer tap...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('👆 [TEST] Haciendo tap en el botón de login...');
       await element(Selectors.loginButton()).tap();
+      console.log('✅ [TEST] Tap realizado');
       
       // Verificar que navegamos a la pantalla de selección de cuenta
       await TestUtils.waitForElement('account-selection-screen', 5000);

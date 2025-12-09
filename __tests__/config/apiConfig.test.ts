@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { Platform } from 'react-native';
 import { 
   getApiBaseUrlLocal, 
@@ -10,7 +11,7 @@ import {
 } from '../../src/config/apiConfig';
 
 // Mock de React Native Platform
-jest.mock('react-native', () => ({
+vi.mock('react-native', () => ({
   Platform: {
     OS: 'ios',
   },
@@ -18,7 +19,7 @@ jest.mock('react-native', () => ({
 
 describe('apiConfig', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getApiBaseUrlLocal', () => {
@@ -29,7 +30,7 @@ describe('apiConfig', () => {
 
     it('debe retornar URL local para Android', () => {
       // Cambiar el mock a Android
-      jest.doMock('react-native', () => ({
+      vi.doMock('react-native', () => ({
         Platform: {
           OS: 'android',
         },
@@ -50,7 +51,7 @@ describe('apiConfig', () => {
 
     it('debe retornar URL de producción para Android', () => {
       // Cambiar el mock a Android
-      jest.doMock('react-native', () => ({
+      vi.doMock('react-native', () => ({
         Platform: {
           OS: 'android',
         },

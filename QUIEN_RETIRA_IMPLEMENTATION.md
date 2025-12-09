@@ -47,7 +47,7 @@ if (!isFamilyAdmin) {
       tabBarIcon: ({ focused }) => (
         <View style={styles.tabIconContainer}>
           <Image
-            source={require('../assets/design/icons/kiki personitas 3.png')}
+            source={require('../assets/design/icons/kiki_personitas_3.png')}
             style={[styles.tabIconImage, { tintColor: focused ? '#FF8C42' : '#FFFFFF' }]}
             resizeMode="contain"
           />

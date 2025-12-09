@@ -3,10 +3,12 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ActivityCard } from '../../src/components/ActivityCard';
 import { Activity } from '../../src/types/activity';
 
+import { vi } from 'vitest';
+
 // Mock de dependencias
-jest.mock('../../src/services/mediaService', () => ({
+vi.mock('../../src/services/mediaService', () => ({
   mediaService: {
-    getMediaUrl: jest.fn((filename) => `https://mock-url.com/${filename}`),
+    getMediaUrl: vi.fn((filename) => `https://mock-url.com/${filename}`),
   },
 }));
 
@@ -31,16 +33,16 @@ describe('ActivityCard', () => {
 
   const defaultProps = {
     activity: mockActivity,
-    onPress: jest.fn(),
-    onEdit: jest.fn(),
-    onDelete: jest.fn(),
-    onAttend: jest.fn(),
+    onPress: vi.fn(),
+    onEdit: vi.fn(),
+    onDelete: vi.fn(),
+    onAttend: vi.fn(),
     isLoading: false,
     currentUserId: 'user1',
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Renderizado', () => {

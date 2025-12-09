@@ -1,17 +1,18 @@
+import { vi } from 'vitest';
 import { AuthService } from '../../src/services/authService';
 import { apiClient } from '../../src/services/api';
 
 // Mock del servicio API
-jest.mock('../../src/services/api', () => ({
+vi.mock('../../src/services/api', () => ({
   apiClient: {
-    post: jest.fn(),
-    get: jest.fn(),
+    post: vi.fn(),
+    get: vi.fn(),
   },
 }));
 
 describe('AuthService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('login', () => {
@@ -35,7 +36,7 @@ describe('AuthService', () => {
         },
       };
 
-      (apiClient.post as jest.Mock).mockResolvedValueOnce(mockResponse);
+      (apiClient.post as any).mockResolvedValueOnce(mockResponse);
 
       const result = await AuthService.login(mockCredentials);
 
@@ -59,7 +60,7 @@ describe('AuthService', () => {
         },
       };
 
-      (apiClient.post as jest.Mock).mockResolvedValueOnce(mockResponse);
+      (apiClient.post as any).mockResolvedValueOnce(mockResponse);
 
       await expect(AuthService.login(mockCredentials)).rejects.toThrow(
         'Credenciales inválidas'
@@ -73,7 +74,7 @@ describe('AuthService', () => {
       };
 
       const networkError = new Error('Network error');
-      (apiClient.post as jest.Mock).mockRejectedValueOnce(networkError);
+      (apiClient.post as any).mockRejectedValueOnce(networkError);
 
       await expect(AuthService.login(mockCredentials)).rejects.toThrow(
         'Error al iniciar sesión'
@@ -94,7 +95,7 @@ describe('AuthService', () => {
         },
       };
 
-      (apiClient.post as jest.Mock).mockRejectedValueOnce(errorWithResponse);
+      (apiClient.post as any).mockRejectedValueOnce(errorWithResponse);
 
       await expect(AuthService.login(mockCredentials)).rejects.toThrow(
         'Usuario no encontrado'
@@ -127,7 +128,7 @@ describe('AuthService', () => {
         },
       };
 
-      (apiClient.get as jest.Mock).mockResolvedValueOnce(mockResponse);
+      (apiClient.get as any).mockResolvedValueOnce(mockResponse);
 
       const result = await AuthService.getAvailableAccounts();
 
@@ -143,7 +144,7 @@ describe('AuthService', () => {
         },
       };
 
-      (apiClient.get as jest.Mock).mockResolvedValueOnce(mockResponse);
+      (apiClient.get as any).mockResolvedValueOnce(mockResponse);
 
       await expect(AuthService.getAvailableAccounts()).rejects.toThrow(
         'Error al obtener cuentas'
@@ -183,7 +184,7 @@ describe('AuthService', () => {
         },
       };
 
-      (apiClient.get as jest.Mock).mockResolvedValueOnce(mockResponse);
+      (apiClient.get as any).mockResolvedValueOnce(mockResponse);
 
       const result = await AuthService.getGruposByCuenta(cuentaId);
 
@@ -204,7 +205,7 @@ describe('AuthService', () => {
         },
       };
 
-      (apiClient.get as jest.Mock).mockResolvedValueOnce(mockResponse);
+      (apiClient.get as any).mockResolvedValueOnce(mockResponse);
 
       const result = await AuthService.verifyToken(token);
 
@@ -219,7 +220,7 @@ describe('AuthService', () => {
     it('debe retornar false cuando el token es inválido', async () => {
       const token = 'invalid-token';
 
-      (apiClient.get as jest.Mock).mockRejectedValueOnce(new Error('Token inválido'));
+      (apiClient.get as any).mockRejectedValueOnce(new Error('Token inválido'));
 
       const result = await AuthService.verifyToken(token);
 
@@ -229,7 +230,7 @@ describe('AuthService', () => {
     it('debe retornar false cuando hay error en la verificación', async () => {
       const token = 'error-token';
 
-      (apiClient.get as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+      (apiClient.get as any).mockRejectedValueOnce(new Error('Network error'));
 
       const result = await AuthService.verifyToken(token);
 

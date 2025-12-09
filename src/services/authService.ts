@@ -12,10 +12,20 @@ export class AuthService {
       if (response.data.success && response.data.data) {
         return response.data.data;
       } else {
+        // Lanzar error con el mensaje de la respuesta directamente
         throw new Error(response.data.message || 'Error al iniciar sesión');
       }
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al iniciar sesión');
+      // Si el error ya tiene un mensaje personalizado (no es el genérico), re-lanzarlo
+      if (error instanceof Error) {
+        // Si el mensaje no es el genérico, significa que viene de la respuesta del servidor
+        if (error.message && error.message !== 'Error al iniciar sesión') {
+          throw error;
+        }
+      }
+      // Si es un error de red u otro tipo sin mensaje personalizado
+      const errorMessage = error.response?.data?.message || error.message || 'Error al iniciar sesión';
+      throw new Error(errorMessage);
     }
   }
 

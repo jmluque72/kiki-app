@@ -1,6 +1,7 @@
 module.exports = { 
   assets: [
-    "./assets/fonts/"
+    "./assets/fonts/",
+    "./assets/design/icons/"
   ],
   dependencies: {
     '@aws-amplify/react-native': {

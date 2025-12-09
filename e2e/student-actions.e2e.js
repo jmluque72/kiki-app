@@ -6,19 +6,7 @@ describe('Student Actions E2E Tests', () => {
   const COORDINADOR_EMAIL = 'coordinador@test.com';
   const COORDINADOR_PASSWORD = 'password123';
 
-  beforeAll(async () => {
-    await device.launchApp({
-      permissions: {
-        camera: 'YES',
-        photos: 'YES',
-        notifications: 'YES',
-      },
-    });
-  });
-
-  beforeEach(async () => {
-    await device.reloadReactNative();
-  });
+  // beforeAll y beforeEach están en init.js (global)
 
   describe('Registrar Acciones Diarias', () => {
     beforeEach(async () => {

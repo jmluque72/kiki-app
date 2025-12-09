@@ -6,6 +6,7 @@ const Selectors = {
   emailInput: () => by.id('email-input'),
   passwordInput: () => by.id('password-input'),
   loginButton: () => by.id('login-button'),
+  eyeIcon: () => by.id('eye-icon'),
   rememberMeToggle: () => by.id('remember-me-toggle'),
   forgotPasswordButton: () => by.id('forgot-password-button'),
   biometricButton: () => by.id('biometric-button'),

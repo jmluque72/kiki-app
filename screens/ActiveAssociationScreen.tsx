@@ -155,11 +155,13 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
     console.log('📱 [GALLERY] Student ID:', student._id);
     console.log('📱 [GALLERY] Active association role:', activeAssociation?.role?.nombre);
     
-    // react-native-image-picker maneja los permisos internamente
-    // NO verificar permisos manualmente - la librería lo hace automáticamente
-    // En Android 13+, usa READ_MEDIA_IMAGES automáticamente
-    
-    const options = {
+    try {
+      // Verificar permisos, pero no bloquear completamente si falla
+      const { checkImagePermissions } = require('../src/utils/permissionUtils');
+      const hasPermission = await checkImagePermissions();
+      console.log('📱 [GALLERY] Permiso verificado:', hasPermission);
+      
+      const options = {
       mediaType: 'photo' as const,
       includeBase64: false,
       maxHeight: 2000,
@@ -216,6 +218,10 @@ const ActiveAssociationScreen: React.FC<ActiveAssociationScreenProps> = ({ onBac
         Alert.alert('Error', 'No se encontraron imágenes');
       }
     });
+    } catch (error: any) {
+      console.error('❌ [GALLERY] Error abriendo galería:', error);
+      Alert.alert('Error', 'No se pudo abrir la galería');
+    }
   };
 
   const handleUploadStudentAvatar = async (student: any, imageUri: string) => {

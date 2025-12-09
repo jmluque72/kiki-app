@@ -1,26 +1,27 @@
+import { vi } from 'vitest';
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 
 // Mock de servicios
-const mockLogin = jest.fn();
-const mockGetAvailableAccounts = jest.fn();
-const mockNavigate = jest.fn();
+const mockLogin = vi.fn();
+const mockGetAvailableAccounts = vi.fn();
+const mockNavigate = vi.fn();
 
-jest.mock('../../src/services/authService', () => ({
+vi.mock('../../src/services/authService', () => ({
   AuthService: {
     login: mockLogin,
     getAvailableAccounts: mockGetAvailableAccounts,
   },
 }));
 
-jest.mock('@react-navigation/native', () => {
-  const actualNav = jest.requireActual('@react-navigation/native');
+vi.mock('@react-navigation/native', async () => {
+  const actualNav = await vi.importActual('@react-navigation/native');
   return {
     ...actualNav,
     useNavigation: () => ({
       navigate: mockNavigate,
-      goBack: jest.fn(),
+      goBack: vi.fn(),
     }),
     useRoute: () => ({
       params: {},

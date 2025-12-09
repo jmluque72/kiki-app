@@ -11,16 +11,16 @@ describe('Activities E2E Tests', () => {
   describe('Login como Coordinador', () => {
     it('debe hacer login exitoso y mostrar pestañas correctas', async () => {
       // 1. Verificar que estamos en la pantalla de login
-      await waitFor(element(Selectors.loginScree()()))
+      await waitFor(element(Selectors.loginScreen()))
         .toBeVisible()
         .withTimeout(5000);
 
       // 2. Ingresar credenciales del coordinador
-      await element(Selectors.emailInpu()()).typeText(COORDINADOR_EMAIL);
-      await element(Selectors.passwordInpu()()).typeText(COORDINADOR_PASSWORD);
+      await element(Selectors.emailInput()).typeText(COORDINADOR_EMAIL);
+      await element(Selectors.passwordInput()).typeText(COORDINADOR_PASSWORD);
 
       // 3. Presionar botón de login
-      await element(Selectors.loginButto()()).tap();
+      await element(Selectors.loginButton()).tap();
 
       // 4. Si hay múltiples asociaciones, seleccionar institución
       try {

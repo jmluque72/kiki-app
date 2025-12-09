@@ -1,21 +1,22 @@
+import { vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react-hooks';
 import { useActivities } from '../../src/hooks/useActivities';
 import { activityService } from '../../src/services/activityService';
 
 // Mock del servicio de actividades
-jest.mock('../../src/services/activityService', () => ({
+vi.mock('../../src/services/activityService', () => ({
   activityService: {
-    getActivities: jest.fn(),
-    getActivityById: jest.fn(),
-    createActivity: jest.fn(),
-    updateActivity: jest.fn(),
-    deleteActivity: jest.fn(),
+    getActivities: vi.fn(),
+    getActivityById: vi.fn(),
+    createActivity: vi.fn(),
+    updateActivity: vi.fn(),
+    deleteActivity: vi.fn(),
   },
 }));
 
 describe('useActivities', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getActivities', () => {

@@ -110,6 +110,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
       <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      testID="login-screen"
     >
       <ScrollView 
         contentContainerStyle={styles.scrollContainer}
@@ -134,6 +135,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
               Email
             </Text>
             <TextInput
+              testID="email-input"
               style={styles.input}
               value={email}
               onChangeText={setEmail}
@@ -161,6 +163,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
             </Text>
             <View style={styles.passwordContainer}>
               <TextInput
+                testID="password-input"
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
@@ -173,6 +176,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
                 onBlur={() => setFocusedField(null)}
               />
               <TouchableOpacity
+                testID="eye-icon"
                 style={styles.eyeButton}
                 onPress={() => setShowPassword(!showPassword)}
               >
@@ -186,6 +190,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onShowForgotPassword }) => {
           </View>
 
           <TouchableOpacity
+            testID="login-button"
             style={styles.loginButton}
             onPress={handleLogin}
           >

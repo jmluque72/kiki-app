@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PasswordInput } from '../../src/components/PasswordInput';
@@ -5,12 +6,12 @@ import { PasswordInput } from '../../src/components/PasswordInput';
 describe('PasswordInput', () => {
   const defaultProps = {
     value: '',
-    onChangeText: jest.fn(),
+    onChangeText: vi.fn(),
     placeholder: 'Contraseña',
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('debe renderizar correctamente', () => {

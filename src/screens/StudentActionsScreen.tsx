@@ -71,6 +71,27 @@ interface StudentActionsScreenProps {
   onBack?: () => void;
 }
 
+// Componente de icono de lápiz usando PNG
+const EditIcon: React.FC<{ size?: number; hasDescription?: boolean }> = ({ 
+  size = 18, 
+  hasDescription = false 
+}) => {
+  // Usar el PNG de lápiz que ya existe en los assets
+  const iconSource = require('../../assets/design/icons/edit.png');
+  
+  return (
+    <Image
+      source={iconSource}
+      style={{
+        width: size,
+        height: size,
+        tintColor: hasDescription ? '#0E5FCE' : '#666',
+        resizeMode: 'contain',
+      }}
+    />
+  );
+};
+
 // ESTA PANTALLA ES SOLO PARA COORDINADORES
 // Para roles familiares se usa FamilyActionsCalendarScreen
 const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) => {
@@ -87,15 +108,18 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
   const [actions, setActions] = useState<StudentAction[]>([]);
   
   // Nuevos estados para selección múltiple
-  // Estructura: { actionId: { action: StudentAction, selectedValues: string[] } }
-  const [selectedActions, setSelectedActions] = useState<{ [key: string]: { action: StudentAction; selectedValues: string[] } }>({});
+  // Estructura: { actionId: { action: StudentAction, selectedValues: string[], descripcion?: string } }
+  const [selectedActions, setSelectedActions] = useState<{ [key: string]: { action: StudentAction; selectedValues: string[]; descripcion?: string } }>({});
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]); // Array de IDs de estudiantes
   
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDateString, setSelectedDateString] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState<string>(new Date().toTimeString().slice(0, 5));
-  const [comments, setComments] = useState<string>('');
-  const [showCommentModal, setShowCommentModal] = useState(false);
+  
+  // Estados para modal de descripción individual por acción
+  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
+  const [selectedActionForDescription, setSelectedActionForDescription] = useState<string | null>(null);
+  const [tempDescription, setTempDescription] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [loadingActions, setLoadingActions] = useState(false);
   const [actionsError, setActionsError] = useState<string | null>(null);
@@ -351,12 +375,13 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
         delete newState[actionId];
         return newState;
       } else {
-        // Si no está seleccionada, agregarla con valores vacíos
+        // Si no está seleccionada, agregarla con valores vacíos y sin descripción
         return {
           ...prev,
           [actionId]: {
             action,
-            selectedValues: []
+            selectedValues: [],
+            descripcion: undefined
           }
         };
       }
@@ -408,13 +433,40 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
     return true;
   };
   
-  // Abrir modal de comentario y guardar
-  const handleSavePress = () => {
+  // Abrir modal de descripción para una acción específica
+  const handleOpenDescriptionModal = (actionId: string) => {
+    const actionData = selectedActions[actionId];
+    setSelectedActionForDescription(actionId);
+    setTempDescription(actionData?.descripcion || '');
+    setShowDescriptionModal(true);
+  };
+
+  // Guardar descripción individual
+  const handleSaveDescription = () => {
+    if (!selectedActionForDescription) return;
+    
+    setSelectedActions(prev => ({
+      ...prev,
+      [selectedActionForDescription]: {
+        ...prev[selectedActionForDescription],
+        descripcion: tempDescription.trim() || undefined
+      }
+    }));
+    
+    setShowDescriptionModal(false);
+    setSelectedActionForDescription(null);
+    setTempDescription('');
+  };
+
+  // Guardar todas las acciones (sin modal global)
+  const handleSavePress = async () => {
     if (!canSave()) {
       Alert.alert('Error', 'Por favor selecciona al menos una acción con sus opciones y al menos un estudiante');
       return;
     }
-    setShowCommentModal(true);
+    
+    // Guardar directamente sin modal global
+    await handleFinalSave();
   };
   
   // Guardar todas las acciones
@@ -437,6 +489,9 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
           const actionData = selectedActions[actionId];
           const action = actionData.action;
           
+          // Obtener la descripción individual de esta acción
+          const descripcionIndividual = actionData.descripcion || '';
+          
           // Si la acción tiene valores configurados, usar el valor seleccionado (solo uno)
           if (action.valores && action.valores.length > 0 && actionData.selectedValues.length === 1) {
             const valor = actionData.selectedValues[0];
@@ -445,7 +500,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
                 estudiante: studentId,
                 accion: actionId,
                 valor: valor,
-                comentarios: comments,
+                comentarios: descripcionIndividual,
                 fechaAccion: fechaAccionISO,
                 imagenes: []
               })
@@ -456,7 +511,7 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
               apiClient.post('/student-actions/log', {
                 estudiante: studentId,
                 accion: actionId,
-                comentarios: comments,
+                comentarios: descripcionIndividual,
                 fechaAccion: fechaAccionISO,
                 imagenes: []
               })
@@ -473,8 +528,6 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
       // Limpiar selecciones
       setSelectedActions({});
       setSelectedStudents([]);
-      setComments('');
-      setShowCommentModal(false);
       
       // Recargar calendario
       loadCalendarActions();
@@ -748,22 +801,48 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
                 
                 return (
                   <View key={action._id} style={styles.actionCard}>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionHeader,
-                        isActionSelected && { backgroundColor: action.color + '20' }
-                      ]}
-                      onPress={() => handleActionToggle(action)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.actionHeaderLeft}>
+                    <View style={[
+                      styles.actionHeader,
+                      isActionSelected && { backgroundColor: action.color + '20' }
+                    ]}>
+                      <TouchableOpacity
+                        style={styles.actionHeaderLeft}
+                        onPress={() => handleActionToggle(action)}
+                        activeOpacity={0.7}
+                      >
                         <View style={[styles.actionCheckbox, isActionSelected && styles.actionCheckboxSelected]}>
                           {isActionSelected && <Text style={styles.actionCheckmark}>✓</Text>}
                         </View>
                         <View style={[styles.actionColorIndicator, { backgroundColor: action.color }]} />
                         <Text style={styles.actionName}>{action.nombre}</Text>
+                      </TouchableOpacity>
+                      
+                      {/* Botón de descripción - solo visible si la acción está seleccionada */}
+                      {isActionSelected && (
+                        <TouchableOpacity
+                          style={[
+                            styles.descriptionButton,
+                            actionData?.descripcion && styles.descriptionButtonActive
+                          ]}
+                          onPress={() => handleOpenDescriptionModal(action._id)}
+                          activeOpacity={0.7}
+                        >
+                          <EditIcon 
+                            size={18}
+                            hasDescription={!!actionData?.descripcion}
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    
+                    {/* Indicador de descripción */}
+                    {isActionSelected && actionData?.descripcion && (
+                      <View style={styles.descriptionIndicator}>
+                        <Text style={styles.descriptionIndicatorText} numberOfLines={1}>
+                          {actionData.descripcion}
+                        </Text>
                       </View>
-                    </TouchableOpacity>
+                    )}
                     
                     {/* Mostrar opciones si la acción tiene valores configurados */}
                     {action.valores && action.valores.length > 0 && (
@@ -897,44 +976,66 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
           <TouchableOpacity
             style={[
               styles.saveButton,
-              !canSave() && styles.saveButtonDisabled
+              (!canSave() || loading) && styles.saveButtonDisabled
             ]}
             onPress={handleSavePress}
-            disabled={!canSave()}
+            disabled={!canSave() || loading}
+            activeOpacity={loading ? 1 : 0.7}
           >
-            <Text style={styles.saveButtonText}>
-              Guardar ({Object.keys(selectedActions).length} acción(es), {selectedStudents.length} estudiante(s))
-            </Text>
+            {loading ? (
+              <View style={styles.saveButtonContent}>
+                <ActivityIndicator color="#FFFFFF" size="small" style={styles.saveButtonLoader} />
+                <Text style={styles.saveButtonText}>
+                  Guardando...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.saveButtonText}>
+                Guardar ({Object.keys(selectedActions).length} acción(es), {selectedStudents.length} estudiante(s))
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Modal para comentario antes de guardar */}
+      {/* Modal para descripción individual por acción (se abre arriba) */}
       <Modal
-        visible={showCommentModal}
+        visible={showDescriptionModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowCommentModal(false)}
+        onRequestClose={() => {
+          setShowDescriptionModal(false);
+          setSelectedActionForDescription(null);
+          setTempDescription('');
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <View style={styles.descriptionModalOverlay}>
+          <View style={styles.descriptionModalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Agregar Comentario</Text>
+              <Text style={styles.modalTitle}>
+                {selectedActionForDescription && selectedActions[selectedActionForDescription]
+                  ? `Descripción: ${selectedActions[selectedActionForDescription].action.nombre}`
+                  : 'Agregar Descripción'}
+              </Text>
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={() => setShowCommentModal(false)}
+                onPress={() => {
+                  setShowDescriptionModal(false);
+                  setSelectedActionForDescription(null);
+                  setTempDescription('');
+                }}
               >
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Comentarios (opcional):</Text>
+              <Text style={styles.modalLabel}>Descripción (opcional):</Text>
               <TextInput
                 style={[styles.modalInput, styles.commentsInput]}
-                value={comments}
-                onChangeText={setComments}
-                placeholder="Comentarios adicionales..."
+                value={tempDescription}
+                onChangeText={setTempDescription}
+                placeholder="Agregar descripción para esta acción..."
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
@@ -944,24 +1045,20 @@ const StudentActionsScreen: React.FC<StudentActionsScreenProps> = ({ onBack }) =
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={() => setShowCommentModal(false)}
+                onPress={() => {
+                  setShowDescriptionModal(false);
+                  setSelectedActionForDescription(null);
+                  setTempDescription('');
+                }}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[
-                  styles.confirmButton,
-                  loading && styles.disabledButton
-                ]}
-                onPress={handleFinalSave}
-                disabled={loading}
+                style={styles.confirmButton}
+                onPress={handleSaveDescription}
               >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.confirmButtonText}>Guardar</Text>
-                )}
+                <Text style={styles.confirmButtonText}>Guardar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1202,6 +1299,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-start',
     paddingTop: 50,
+  },
+  descriptionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    paddingTop: 50,
+  },
+  descriptionModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    maxHeight: '50%',
+    paddingTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -1672,6 +1787,7 @@ const styles = StyleSheet.create({
   actionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     backgroundColor: '#FFFFFF',
   },
@@ -1711,6 +1827,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     flex: 1,
+  },
+  descriptionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F0F8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    borderWidth: 1.5,
+    borderColor: '#0E5FCE',
+  },
+  descriptionButtonActive: {
+    backgroundColor: '#E3F2FD',
+    borderColor: '#0E5FCE',
+    borderWidth: 2,
+  },
+  descriptionIndicator: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F8F9FA',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  descriptionIndicatorText: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
   },
   actionValuesContainer: {
     paddingHorizontal: 16,
@@ -1830,11 +1974,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    minHeight: 52,
   },
   saveButtonDisabled: {
     backgroundColor: '#CCCCCC',
     shadowOpacity: 0,
     elevation: 0,
+    opacity: 0.6,
+  },
+  saveButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonLoader: {
+    marginRight: 8,
   },
   saveButtonText: {
     color: '#FFFFFF',

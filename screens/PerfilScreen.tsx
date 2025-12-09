@@ -36,7 +36,7 @@ import PushNotificationPreferences from '../components/PushNotificationPreferenc
 import ChangePasswordScreen from './ChangePasswordScreen';
 import { processStudentImage, prepareStudentImageForUpload } from '../src/services/studentImageService';
 import useImagePicker from '../src/hooks/useImagePicker';
-import { checkCameraPermissions } from '../src/utils/permissionUtils';
+import { checkCameraPermissions, checkImagePermissions } from '../src/utils/permissionUtils';
 import { apiClient } from '../src/services/api';
 import { API_FULL_URL } from '../src/config/apiConfig';
 
@@ -423,45 +423,53 @@ const PerfilScreen = ({ onBack, onOpenNotifications, onOpenMenu: onOpenMenuProp,
   };
 
   const openGallery = async () => {
-    // react-native-image-picker maneja los permisos internamente
-    // NO verificar permisos manualmente - la librería lo hace automáticamente
-    
-    const options = {
-      mediaType: 'photo' as const,
-      includeBase64: false,
-      maxHeight: 2000,
-      maxWidth: 2000,
-    };
+    try {
+      console.log('📷 [GALLERY] Abriendo galería para avatar de usuario');
+      
+      // Verificar permisos, pero no bloquear completamente si falla
+      const hasPermission = await checkImagePermissions();
+      console.log('📷 [GALLERY] Permiso verificado:', hasPermission);
+      
+      const options = {
+        mediaType: 'photo' as const,
+        includeBase64: false,
+        maxHeight: 2000,
+        maxWidth: 2000,
+      };
 
-    launchImageLibrary(options, (response) => {
-      if (response.didCancel) {
-        console.log('Usuario canceló la galería');
-      } else if (response.errorCode) {
-        console.log('Error de galería:', response.errorCode);
-        Alert.alert('Error', 'No se pudo abrir la galería');
-      } else if (response.assets && response.assets[0] && response.assets[0].uri) {
-        const imageUri = response.assets[0].uri;
-        console.log('📱 [GALLERY] Imagen seleccionada para avatar de usuario:', imageUri);
-        
-        // En Android, copiar la imagen a un lugar permanente antes de establecerla
-        if (Platform.OS === 'android') {
-          console.log('📱 [GALLERY] Android detectado - copiando imagen a lugar permanente...');
-          copyImageToPermanentLocation(imageUri)
-            .then((permanentUri) => {
-              console.log('✅ [GALLERY] Imagen copiada exitosamente a:', permanentUri);
-              setSelectedImage(permanentUri);
-            })
-            .catch((error) => {
-              console.error('❌ [GALLERY] Error copiando imagen, usando original:', error);
-              // Usar URI original de todas formas - puede funcionar si el archivo aún existe
-              setSelectedImage(imageUri);
-            });
-        } else {
-          // En iOS, usar directamente
-          setSelectedImage(imageUri);
+      launchImageLibrary(options, (response) => {
+        if (response.didCancel) {
+          console.log('Usuario canceló la galería');
+        } else if (response.errorCode) {
+          console.log('Error de galería:', response.errorCode);
+          Alert.alert('Error', 'No se pudo abrir la galería');
+        } else if (response.assets && response.assets[0] && response.assets[0].uri) {
+          const imageUri = response.assets[0].uri;
+          console.log('📱 [GALLERY] Imagen seleccionada para avatar de usuario:', imageUri);
+          
+          // En Android, copiar la imagen a un lugar permanente antes de establecerla
+          if (Platform.OS === 'android') {
+            console.log('📱 [GALLERY] Android detectado - copiando imagen a lugar permanente...');
+            copyImageToPermanentLocation(imageUri)
+              .then((permanentUri) => {
+                console.log('✅ [GALLERY] Imagen copiada exitosamente a:', permanentUri);
+                setSelectedImage(permanentUri);
+              })
+              .catch((error) => {
+                console.error('❌ [GALLERY] Error copiando imagen, usando original:', error);
+                // Usar URI original de todas formas - puede funcionar si el archivo aún existe
+                setSelectedImage(imageUri);
+              });
+          } else {
+            // En iOS, usar directamente
+            setSelectedImage(imageUri);
+          }
         }
-      }
-    });
+      });
+    } catch (error: any) {
+      console.error('❌ [GALLERY] Error abriendo galería:', error);
+      Alert.alert('Error', 'No se pudo abrir la galería');
+    }
   };
 
   // Función para editar avatar del estudiante

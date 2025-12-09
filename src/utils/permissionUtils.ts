@@ -8,19 +8,51 @@ export const checkImagePermissions = async (): Promise<boolean> => {
       console.log('📱 [PERMISSIONS] iOS - Permisos manejados automáticamente');
       return true;
     } else if (Platform.OS === 'android') {
-      // En Android, verificar permisos de almacenamiento
-      const storagePermission = await check(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
+      // En Android 13+ (API 33+), usar READ_MEDIA_IMAGES
+      // En versiones anteriores, usar READ_EXTERNAL_STORAGE
+      const androidVersion = Platform.Version;
+      const isAndroid13Plus = androidVersion >= 33;
       
-      console.log('📱 [PERMISSIONS] Android storage permission:', storagePermission);
-      
-      if (storagePermission === RESULTS.GRANTED) {
-        return true;
-      } else if (storagePermission === RESULTS.DENIED) {
-        const requestResult = await request(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
-        console.log('📱 [PERMISSIONS] Android storage permission request result:', requestResult);
-        return requestResult === RESULTS.GRANTED;
+      let permission: any;
+      if (isAndroid13Plus) {
+        permission = PERMISSIONS.ANDROID.READ_MEDIA_IMAGES;
+        console.log('📱 [PERMISSIONS] Android 13+ detectado, usando READ_MEDIA_IMAGES');
       } else {
-        console.log('📱 [PERMISSIONS] Android storage permission denied permanently');
+        permission = PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
+        console.log('📱 [PERMISSIONS] Android < 13, usando READ_EXTERNAL_STORAGE');
+      }
+      
+      const permissionStatus = await check(permission);
+      console.log('📱 [PERMISSIONS] Android permission status:', permissionStatus);
+      
+      if (permissionStatus === RESULTS.GRANTED) {
+        console.log('✅ [PERMISSIONS] Permiso ya otorgado');
+        return true;
+      } else if (permissionStatus === RESULTS.DENIED) {
+        console.log('📱 [PERMISSIONS] Permiso denegado, solicitando...');
+        const requestResult = await request(permission);
+        console.log('📱 [PERMISSIONS] Resultado de solicitud:', requestResult);
+        
+        if (requestResult === RESULTS.GRANTED) {
+          console.log('✅ [PERMISSIONS] Permiso otorgado');
+          return true;
+        } else if (requestResult === RESULTS.BLOCKED) {
+          console.log('⚠️ [PERMISSIONS] Permiso bloqueado permanentemente');
+          Alert.alert(
+            'Permisos Requeridos',
+            'La app necesita acceso a la galería para seleccionar imágenes. Por favor, habilita los permisos en Configuración.',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Configuración', onPress: () => Linking.openSettings() }
+            ]
+          );
+          return false;
+        } else {
+          console.log('❌ [PERMISSIONS] Permiso denegado por el usuario');
+          return false;
+        }
+      } else if (permissionStatus === RESULTS.BLOCKED) {
+        console.log('⚠️ [PERMISSIONS] Permiso bloqueado permanentemente');
         Alert.alert(
           'Permisos Requeridos',
           'La app necesita acceso a la galería para seleccionar imágenes. Por favor, habilita los permisos en Configuración.',
@@ -30,13 +62,19 @@ export const checkImagePermissions = async (): Promise<boolean> => {
           ]
         );
         return false;
+      } else {
+        console.log('❌ [PERMISSIONS] Estado de permiso desconocido:', permissionStatus);
+        return false;
       }
     }
     
     return true;
   } catch (error) {
     console.error('📱 [PERMISSIONS] Error verificando permisos:', error);
-    return false;
+    // En caso de error, intentar abrir el selector de imágenes de todas formas
+    // react-native-image-picker puede manejar los permisos internamente
+    console.log('⚠️ [PERMISSIONS] Error en verificación, continuando de todas formas...');
+    return true;
   }
 };
 
